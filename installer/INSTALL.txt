@@ -1,0 +1,29 @@
+EDR Project Sharer - Install notes
+==================================
+
+OPTION A - If Smart App Control / SmartScreen blocks EDR-Setup.exe
+-----------------------------------------------------------------
+1. Extract this whole folder (or EDR-win64.zip).
+2. Double-click:  Install-EDR.cmd
+   (or run: powershell -ExecutionPolicy Bypass -File Install-EDR.ps1)
+3. No setup EXE required.
+
+OPTION B - Run EDR-Setup.exe
+----------------------------
+If Windows says "Windows protected your PC":
+  1. Click "More info"
+  2. Click "Run anyway"
+
+If you downloaded from the browser:
+  Right-click EDR-Setup.exe -> Properties -> check "Unblock" at the bottom -> OK
+
+Smart App Control (Windows 11):
+  Settings -> Privacy & security -> Windows Security ->
+  App & browser control -> Smart App Control -> turn Off
+  (or wait until you have a code-signed build)
+
+Requirements (lite build):
+  Python 3.11+  (winget install Python.Python.3.11)
+
+After install, open a NEW terminal:
+  edr version

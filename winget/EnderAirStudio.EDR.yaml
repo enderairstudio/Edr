@@ -1,0 +1,27 @@
+# Submit to winget-pkgs or use locally: winget install --manifest .\
+PackageIdentifier: EnderAirStudio.EDR
+PackageVersion: 0.5.5
+PackageLocale: en-US
+Publisher: Ender Air Studio
+PublisherUrl: https://github.com/enderairstudio
+PublisherSupportUrl: https://github.com/enderairstudio/Edr/issues
+PackageName: EDR Project Sharer
+PackageUrl: https://github.com/enderairstudio/Edr
+License: MIT
+ShortDescription: Share project folders over LAN or relay with EDR Guard protection.
+Moniker: edr
+Tags:
+  - file-sharing
+  - lan
+Installers:
+  - Architecture: x64
+    InstallerType: inno
+    InstallerUrl: https://github.com/enderairstudio/Edr/releases/latest/download/EDR-Setup.exe
+    InstallerSha256: PLACEHOLDER_SHA256
+    Scope: user
+    InstallerSwitches:
+      Silent: /VERYSILENT /NORESTART /SUPPRESSMSGBOXES
+      SilentWithProgress: /SILENT /NORESTART /SUPPRESSMSGBOXES
+    UpgradeBehavior: uninstallPrevious
+ManifestType: singleton
+ManifestVersion: 1.6.0

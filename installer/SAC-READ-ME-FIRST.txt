@@ -1,0 +1,17 @@
+SMART APP CONTROL - USE THIS FOLDER
+====================================
+
+DO NOT run EDR-Setup-Installer.exe if Windows blocks it.
+
+1. Double-click:  START-HERE.cmd
+
+2. Open a NEW terminal:
+     edr version
+
+If "edr" is still blocked, use:
+     edr.cmd version
+
+Optional (may be blocked by Smart App Control):
+  EDR-Setup-Installer.exe
+
+Permanent fix for EXE installs: code-sign the installer (Authenticode).

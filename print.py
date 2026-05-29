@@ -1,6 +1,6 @@
 import sys
 
-VERSION = "0.5.0"
+VERSION = "0.5.5"
 
 _active_stage = None
 
@@ -83,9 +83,10 @@ Usage:
   edr relay start                Start a local relay for --non-network sharing
   edr status [id]                Show what a sharer would send
   edr pack [file]                Create a zip bundle
+  edr scan [folder]              Run EDR Guard (blocks viruses before share)
   edr ip                         Print this machine's sharing IP
   edr version                    Show the CLI version
-  edr doctor                     Show which CLI files are being used
+  edr doctor                     Show install path / npm conflicts (Windows)
   edr help                       Show this menu
 
 Non-network sharing:

@@ -5,6 +5,7 @@ import secrets
 import sys
 
 import error as e
+import guard as g
 import print as p
 import relay as r
 import share as s
@@ -108,6 +109,11 @@ def build_parser():
     pack_cmd.add_argument("--include-cli", action="store_true")
     pack_cmd.add_argument("--force", action="store_true")
     pack_cmd.set_defaults(func=cmd_pack)
+
+    scan_cmd = subparsers.add_parser("scan", help="run EDR Guard on a folder", allow_abbrev=False)
+    scan_cmd.add_argument("path", nargs="?", default=".")
+    scan_cmd.add_argument("--include-cli", action="store_true")
+    scan_cmd.set_defaults(func=cmd_scan)
 
     status_cmd = subparsers.add_parser("status", aliases=["st"], help="show what a sharer would send", allow_abbrev=False)
     status_cmd.add_argument("share_id", nargs="?")
@@ -307,6 +313,13 @@ def cmd_pack(args):
     return 0
 
 
+def cmd_scan(args):
+    folder = resolve_folder(args.path)
+    count = g.require_clean_project(folder, args.include_cli)
+    p.success(f"EDR Guard: {count} files clean — safe to share.")
+    return 0
+
+
 def cmd_status(args):
     include_cli = args.include_cli
     if args.share_id:
@@ -342,13 +355,40 @@ def cmd_version(args):
 
 
 def cmd_doctor(args):
+    handler_path = Path(__file__).resolve()
     p.key_value("Version", p.VERSION)
     p.key_value("Python", sys.executable)
-    p.key_value("Command", Path(__file__).resolve().with_name("command.py"))
-    p.key_value("Handler", Path(__file__).resolve())
+    p.key_value("Command", handler_path.with_name("command.py"))
+    p.key_value("Handler", handler_path)
     p.key_value("Relay URL", r.relay_base_url())
     p.key_value("CWD", Path.cwd())
     p.key_value("ARGV", " ".join(sys.argv))
+
+    if sys.platform == "win32":
+        import subprocess
+
+        p.section("edr on PATH (first wins in cmd)")
+        try:
+            result = subprocess.run(
+                ["where.exe", "edr"],
+                capture_output=True,
+                text=True,
+                check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+            if not lines:
+                p.warn("No 'edr' found on PATH.")
+            for index, line in enumerate(lines):
+                p.key_value(f"where[{index}]", line)
+                lower = line.lower()
+                if "npm" in lower and ("@enderair" in lower or "node_modules" in lower):
+                    p.warn("Old npm @enderair/edr is still on PATH — run: npm uninstall -g @enderair/edr")
+                if index == 0 and "appdata\\local\\edr" not in lower.replace("/", "\\"):
+                    p.warn("First 'edr' is not %LOCALAPPDATA%\\EDR — reinstall or fix PATH order.")
+        except OSError as err:
+            p.warn(f"where.exe failed: {err}")
+
     return 0
 
 

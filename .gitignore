@@ -1,0 +1,7 @@
+build/
+dist/
+__pycache__/
+*.pyc
+.edr/
+*.spec.bak
+build/EDR-Setup-Full.generated.iss

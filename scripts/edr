@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# EDR launcher (macOS / Linux)
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+PY=""
+for candidate in python3 python; do
+  if command -v "$candidate" >/dev/null 2>&1; then
+    PY="$candidate"
+    break
+  fi
+done
+if [[ -z "$PY" ]]; then
+  echo "EDR needs Python 3.11+. Install Python 3 and try again." >&2
+  exit 1
+fi
+exec "$PY" "$ROOT/app/command.py" "$@"

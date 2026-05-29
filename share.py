@@ -7,14 +7,15 @@ import struct
 import zipfile
 
 import error as e
+import guard as g
 import print as p
 import relay as r
 
 DEFAULT_PORT = 5005
 PROTOCOL_MAGIC = b"EDR1"
-IGNORE_DIRS = {'.edr', '.git', '__pycache__', 'venv', '.venv', 'node_modules', '.mypy_cache', '.pytest_cache', 'dist', 'build'}
+IGNORE_DIRS = {'.edr', '.git', '__pycache__', 'venv', '.venv', 'node_modules', '.mypy_cache', '.pytest_cache', 'dist', 'build', 'python', 'launcher'}
 IGNORE_FILES = {'project_payload.zip'}
-CLI_FILES = {'command.py', 'handler.py', 'share.py', 'error.py', 'print.py', 'relay.py'}
+CLI_FILES = {'command.py', 'handler.py', 'share.py', 'error.py', 'print.py', 'relay.py', 'guard.py'}
 
 
 def get_local_ip():
@@ -98,7 +99,9 @@ def build_manifest(root_dir=".", include_cli=False, share_id=None, non_network=F
     return manifest
 
 
-def bundle_to_memory(root_dir=".", include_cli=False, verbose=False):
+def bundle_to_memory(root_dir=".", include_cli=False, verbose=False, skip_guard=False):
+    if not skip_guard:
+        g.require_clean_project(root_dir, include_cli)
     memory_file = io.BytesIO()
     try:
         files = list(iter_project_files(root_dir, include_cli))
@@ -168,6 +171,7 @@ def start_server(
         p.info(f"Pull command: edr pull {local_ip} --port {port}")
 
     if dry_run:
+        g.require_clean_project(root, include_cli)
         p.info("Dry run complete. No network socket was opened.")
         return
 
@@ -262,12 +266,16 @@ def receive_project(ip_pin, port=DEFAULT_PORT, target_dir=None, force=False, rel
 
         p.progress("downloading project", 100)
         manifest, zip_buffer = parse_payload(buffer.getvalue())
+        g.require_clean_archive(zip_buffer)
+        zip_buffer.seek(0)
         destination = choose_target_dir(manifest, target_dir, force)
         p.key_value("Remote", f"{ip_pin}:{port}")
         p.key_value("Folder", destination)
         p.key_value("Files", manifest.get("file_count", "unknown"))
         extracted = safe_extract(zip_buffer, destination, force, manifest)
         return extracted, destination
+    except e.CliError:
+        raise
     except Exception as err:
         e.handle_error("ConnectionError", f"Failed to receive from {ip_pin}:{port}: {err}")
         return 0, Path(target_dir or ".").resolve()
@@ -285,11 +293,15 @@ def _receive_via_relay(relay_id, relay_code, target_dir, force, relay_url):
         raw = r.download_payload(relay_id, on_progress=download_progress, base_url=relay_url)
         p.progress("connecting to relay", 100)
         manifest, zip_buffer = parse_payload(raw)
+        g.require_clean_archive(zip_buffer)
+        zip_buffer.seek(0)
         destination = choose_target_dir(manifest, target_dir, force)
         p.key_value("Folder", destination)
         p.key_value("Files", manifest.get("file_count", "unknown"))
         extracted = safe_extract(zip_buffer, destination, force, manifest)
         return extracted, destination
+    except e.CliError:
+        raise
     except Exception as err:
         e.handle_error("ConnectionError", f"Failed to receive {relay_code}: {err}")
         return 0, Path(target_dir or ".").resolve()

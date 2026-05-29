@@ -1,0 +1,85 @@
+name: Release builds
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: ./build.ps1
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: EDR-Windows
+          path: |
+            dist/EDR-Setup.exe
+            dist/EDR-Setup/**
+            dist/EDR-Install.zip
+            dist/EDR-win64.zip
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build macOS package
+        run: |
+          chmod +x build-unix.sh scripts/edr scripts/install-macos.sh
+          ./build-unix.sh macos
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EDR-macOS
+          path: dist/EDR-Setup-mac.tar.gz
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Linux package
+        run: |
+          chmod +x build-unix.sh scripts/edr scripts/install-linux.sh
+          ./build-unix.sh linux
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EDR-Linux
+          path: dist/EDR-Setup-linux.tar.gz
+
+  github-release:
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/EDR-Windows/EDR-Setup.exe
+            artifacts/EDR-Windows/EDR-Install.zip
+            artifacts/EDR-Windows/EDR-win64.zip
+            artifacts/EDR-macOS/EDR-Setup-mac.tar.gz
+            artifacts/EDR-Linux/EDR-Setup-linux.tar.gz
+          generate_release_notes: true
