@@ -5,3 +5,4 @@ __pycache__/
 .edr/
 *.spec.bak
 build/EDR-Setup-Full.generated.iss
+Website
