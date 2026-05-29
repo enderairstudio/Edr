@@ -39,8 +39,10 @@ jobs:
 
       - name: Build macOS package
         run: |
+          perl -pi -e 's/\r$//' build-unix.sh scripts/edr scripts/install-macos.sh
           chmod +x build-unix.sh scripts/edr scripts/install-macos.sh
-          ./build-unix.sh macos
+          bash ./build-unix.sh macos
+          test -f dist/EDR-Setup-mac.tar.gz
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
@@ -55,8 +57,10 @@ jobs:
 
       - name: Build Linux package
         run: |
+          sed -i 's/\r$//' build-unix.sh scripts/edr scripts/install-linux.sh
           chmod +x build-unix.sh scripts/edr scripts/install-linux.sh
-          ./build-unix.sh linux
+          bash ./build-unix.sh linux
+          test -f dist/EDR-Setup-linux.tar.gz
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
@@ -64,22 +68,43 @@ jobs:
           name: EDR-Linux
           path: dist/EDR-Setup-linux.tar.gz
 
+  # Windows is required for a public release; Mac/Linux attach when those jobs succeed.
   github-release:
     needs: [build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: needs.build-windows.result == 'success' && startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          name: EDR-Windows
+          path: release
+
+      - name: Download macOS artifact (optional)
+        if: needs.build-macos.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: EDR-macOS
+          path: release
+
+      - name: Download Linux artifact (optional)
+        if: needs.build-linux.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: EDR-Linux
+          path: release
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            artifacts/EDR-Windows/EDR-Setup.exe
-            artifacts/EDR-Windows/EDR-Install.zip
-            artifacts/EDR-Windows/EDR-win64.zip
-            artifacts/EDR-macOS/EDR-Setup-mac.tar.gz
-            artifacts/EDR-Linux/EDR-Setup-linux.tar.gz
-          generate_release_notes: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mapfile -t files < <(find release -type f | sort)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No release files found under release/"
+            find release || true
+            exit 1
+          fi
+          printf 'Publishing:\n  %s\n' "${files[@]}"
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --generate-notes \
+            "${files[@]}"

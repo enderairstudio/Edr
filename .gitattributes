@@ -1,0 +1,7 @@
+* text=auto
+*.sh text eol=lf
+*.bash text eol=lf
+build-unix.sh text eol=lf
+scripts/edr text eol=lf
+scripts/install-macos.sh text eol=lf
+scripts/install-linux.sh text eol=lf

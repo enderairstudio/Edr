@@ -12,6 +12,22 @@ if [[ "$PLATFORM" != "macos" && "$PLATFORM" != "linux" ]]; then
   exit 1
 fi
 
+# Strip Windows CRLF so CI / macOS / Linux bash does not fail on shebang lines.
+fix_crlf() {
+  local f="$1"
+  if [[ ! -f "$f" ]]; then
+    return 0
+  fi
+  if perl -pi -e 's/\r$//' "$f" 2>/dev/null; then
+    return 0
+  fi
+  sed -i 's/\r$//' "$f" 2>/dev/null || sed -i '' 's/\r$//' "$f"
+}
+fix_crlf "$ROOT/build-unix.sh"
+fix_crlf "$ROOT/scripts/edr"
+fix_crlf "$ROOT/scripts/install-macos.sh"
+fix_crlf "$ROOT/scripts/install-linux.sh"
+
 echo "Building EDR payload for $PLATFORM..."
 rm -rf "$PAYLOAD"
 mkdir -p "$PAYLOAD/app"
@@ -25,8 +41,8 @@ chmod +x "$PAYLOAD/edr"
 if [[ "$PLATFORM" == "macos" ]]; then
   BUNDLE="$DIST/EDR-Setup-mac"
   rm -rf "$BUNDLE"
-  mkdir -p "$BUNDLE"
-  cp -R "$PAYLOAD/"* "$BUNDLE/edr/"
+  mkdir -p "$BUNDLE/edr"
+  cp -R "$PAYLOAD/." "$BUNDLE/edr/"
   cp "$ROOT/scripts/install-macos.sh" "$BUNDLE/Install-EDR.command"
   cp "$ROOT/installer/INSTALL.txt" "$BUNDLE/" 2>/dev/null || true
   chmod +x "$BUNDLE/Install-EDR.command"
@@ -36,8 +52,8 @@ if [[ "$PLATFORM" == "macos" ]]; then
 else
   BUNDLE="$DIST/EDR-Setup-linux"
   rm -rf "$BUNDLE"
-  mkdir -p "$BUNDLE"
-  cp -R "$PAYLOAD/"* "$BUNDLE/edr/"
+  mkdir -p "$BUNDLE/edr"
+  cp -R "$PAYLOAD/." "$BUNDLE/edr/"
   cp "$ROOT/scripts/install-linux.sh" "$BUNDLE/install-edr.sh"
   cp "$ROOT/installer/INSTALL.txt" "$BUNDLE/" 2>/dev/null || true
   chmod +x "$BUNDLE/install-edr.sh"
