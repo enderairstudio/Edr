@@ -2,7 +2,7 @@
 ; Smallest/cleanest VirusTotal profile. Use EDR-Setup-Full.iss for offline Python.
 
 #define MyAppName "EDR Project Sharer"
-#define MyAppVersion "0.5.6"
+#define MyAppVersion "0.5.7"
 #define MyAppPublisher "Ender Air Studio"
 #define MyAppURL "https://github.com/enderairstudio/Edr"
 
@@ -27,7 +27,7 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-VersionInfoVersion=0.5.6.0
+VersionInfoVersion=0.5.7.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName} Setup
 VersionInfoProductName={#MyAppName}

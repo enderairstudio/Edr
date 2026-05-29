@@ -205,8 +205,7 @@ def cmd_create(args):
         p.key_value("Network", "relay (anywhere)")
         p.key_value("Share code", entry["relay_code"])
         p.key_value("Relay", r.relay_base_url())
-        p.info("Start relay if needed: edr relay start")
-        p.info(f"Start sharing: edr start {share_id}")
+        p.info(f"Start sharing (waits for pull): edr start {share_id}")
         p.info(f"Pull anywhere: edr pull {entry['relay_code']}")
     else:
         p.info(f"Start it with: edr start {share_id}")
@@ -407,8 +406,16 @@ def cmd_relay_start(args):
 
 
 def start_profile(item, port=None, forever=False, dry_run=False):
+    folder = Path(item["path"])
+    summary = s.project_summary(root_dir=folder, include_cli=item.get("include_cli", False))
+    if summary["files"] == 0:
+        p.warn(
+            f"Sharer folder has 0 files to send: {folder}\n"
+            f"  Fix with: edr set-dir {item['id']} <your-project-folder>"
+        )
+
     s.start_server(
-        root_dir=Path(item["path"]),
+        root_dir=folder,
         port=port or item["port"],
         include_cli=item.get("include_cli", False),
         dry_run=dry_run,

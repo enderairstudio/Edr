@@ -1,6 +1,6 @@
 import sys
 
-VERSION = "0.5.6"
+VERSION = "0.5.7"
 
 _active_stage = None
 
@@ -91,8 +91,9 @@ Usage:
 
 Non-network sharing:
   edr create sharer --non-network --idnew
-  edr start <id>                 Upload to relay; share code Edrnko_<id>
+  edr start <id>                 Wait for pull; share when receiver connects
   edr pull Edrnko_<id>           Pull from anywhere (same relay server)
+  edr relay start                Optional — local relay auto-starts on start if needed
 
 Compatibility:
   edr create share               Same as: edr share .

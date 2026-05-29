@@ -203,13 +203,30 @@ def _serve_via_tcp(root, port, include_cli, share_id, forever):
 
 
 def _serve_via_relay(root, include_cli, share_id, relay_id, forever, relay_url):
+    base = r.ensure_relay_available(relay_url)
+    code = r.relay_code(relay_id)
+
     while True:
+        r.register_waiting_room(relay_id, base_url=base)
+        p.progress("waiting for receiver", 0)
+        p.info(f"Waiting for a pull on {code} …")
+        p.info(f"On another device: edr pull {code}")
+
+        try:
+            r.wait_for_pull_request(relay_id, base_url=base)
+        except TimeoutError as err:
+            p.error(str(err))
+            return
+
+        p.progress("waiting for receiver", 100)
+        p.success("Receiver connected — preparing share")
+
         manifest = build_manifest(
             root,
             include_cli,
             share_id,
             non_network=True,
-            relay_code=r.relay_code(relay_id),
+            relay_code=code,
         )
         data = bundle_to_memory(root, include_cli, verbose=True)
         p.progress("sharing files", 0)
@@ -217,14 +234,14 @@ def _serve_via_relay(root, include_cli, share_id, relay_id, forever, relay_url):
         p.progress("sharing files", 50)
 
         def upload_progress(percent):
-            p.progress("uploading folders and files", percent)
+            p.progress("sharing files", min(99, 50 + percent // 2))
 
-        r.upload_payload(relay_id, payload, on_progress=upload_progress, base_url=relay_url)
+        r.upload_payload(relay_id, payload, on_progress=upload_progress, base_url=base)
         p.progress("sharing files", 100)
         p.success(f"Shared {format_bytes(len(payload))} via relay.")
-        p.info(f"Receiver can run: edr pull {r.relay_code(relay_id)}")
         if not forever:
             break
+        p.info("Waiting for the next pull …")
 
 
 def _send_once(conn, root, include_cli, share_id, network_label="LAN"):
@@ -283,14 +300,17 @@ def receive_project(ip_pin, port=DEFAULT_PORT, target_dir=None, force=False, rel
 
 def _receive_via_relay(relay_id, relay_code, target_dir, force, relay_url):
     try:
+        base = r.ensure_relay_available(relay_url)
         p.progress("connecting to relay", 0)
         p.key_value("Share code", relay_code)
-        p.key_value("Relay", relay_url or r.relay_base_url())
+        p.key_value("Relay", base)
+        p.info("Requesting share from sender …")
+        r.request_pull(relay_id, base_url=base)
 
         def download_progress(percent):
             p.progress("downloading project", percent)
 
-        raw = r.download_payload(relay_id, on_progress=download_progress, base_url=relay_url)
+        raw = r.download_payload(relay_id, on_progress=download_progress, base_url=base)
         p.progress("connecting to relay", 100)
         manifest, zip_buffer = parse_payload(raw)
         g.require_clean_archive(zip_buffer)
