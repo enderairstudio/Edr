@@ -7,8 +7,8 @@ Share project folders over LAN or relay. Includes **EDR Guard** to block dangero
 | Platform | File | Install |
 |----------|------|---------|
 | **Windows** | `EDR-Setup.exe` | Run installer (or `START-HERE.cmd` if Smart App Control blocks the EXE) |
-| **macOS** | `EDR-Setup-mac.tar.gz` | Extract → double-click `Install-EDR.command` |
-| **Linux** | `EDR-Setup-linux.tar.gz` | Extract → run `./install-edr.sh` |
+| **macOS** | `EDR-Setup.dmg` | Open the disk image → double-click **Install EDR.command** |
+| **Linux** | `EDR-Setup.deb` | `sudo apt install ./EDR-Setup.deb` then run `edr` (Ubuntu/Debian) |
 
 Requires **Python 3.11+** on the machine (`winget install Python.Python.3.11` on Windows).
 
@@ -24,7 +24,8 @@ Output: `dist\EDR-Setup.exe`
 ### macOS / Linux
 ```bash
 chmod +x build-unix.sh
-./build-unix.sh macos   # or linux
+./build-unix.sh macos   # → dist/EDR-Setup.dmg
+./build-unix.sh linux   # → dist/EDR-Setup.deb
 ```
 
 ## CI

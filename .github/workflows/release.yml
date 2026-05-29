@@ -42,13 +42,13 @@ jobs:
           perl -pi -e 's/\r$//' build-unix.sh scripts/edr scripts/install-macos.sh
           chmod +x build-unix.sh scripts/edr scripts/install-macos.sh
           bash ./build-unix.sh macos
-          test -f dist/EDR-Setup-mac.tar.gz
+          test -f dist/EDR-Setup.dmg
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: EDR-macOS
-          path: dist/EDR-Setup-mac.tar.gz
+          path: dist/EDR-Setup.dmg
 
   build-linux:
     runs-on: ubuntu-latest
@@ -60,13 +60,13 @@ jobs:
           sed -i 's/\r$//' build-unix.sh scripts/edr scripts/install-linux.sh
           chmod +x build-unix.sh scripts/edr scripts/install-linux.sh
           bash ./build-unix.sh linux
-          test -f dist/EDR-Setup-linux.tar.gz
+          test -f dist/EDR-Setup.deb
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
           name: EDR-Linux
-          path: dist/EDR-Setup-linux.tar.gz
+          path: dist/EDR-Setup.deb
 
   # Windows is required for a public release; Mac/Linux attach when those jobs succeed.
   github-release:
