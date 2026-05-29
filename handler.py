@@ -495,10 +495,16 @@ def normalize_legacy_args(args):
                 cleaned.append(item)
         return ["receive", ip or ""] + cleaned
 
-    # Support: edr create sharer -non-network -idnew (single-dash flags)
+    # Support: edr create sharer [folder] --non-network --idnew
     if len(args) >= 2 and args[0] == "create" and args[1] == "sharer":
-        converted = ["create", "sharer"]
-        for item in args[2:]:
+        converted = ["create"]
+        rest = args[2:]
+        folder = "."
+        if rest and not rest[0].startswith("-"):
+            folder = rest[0]
+            rest = rest[1:]
+        converted.append(folder)
+        for item in rest:
             if item in {"-non-network", "-idnew"}:
                 converted.append("--" + item[1:])
             else:

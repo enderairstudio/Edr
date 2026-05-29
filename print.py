@@ -1,6 +1,6 @@
 import sys
 
-VERSION = "0.5.5"
+VERSION = "0.5.6"
 
 _active_stage = None
 
