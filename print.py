@@ -1,7 +1,7 @@
 import sys
 import time
 
-VERSION = "0.5.8"
+VERSION = "0.5.9"
 
 _active_stage = None
 _work_scale = 1.0
@@ -239,9 +239,11 @@ Share and receive:
 Other:
   edr pack [zip]                   Zip a folder locally
   edr scan [folder]                Run EDR Guard only (no transfer)
+  edr scan [folder] --report out   Export Guard report (out.json + out.txt)
   edr ip                           Show this PC's LAN IP for edr pull <ip>
-  edr version                      Show CLI version (alias: v)
-  edr doctor                       Paths, Python, relay URL (Windows PATH check)
+  edr version                      Show CLI version
+  edr v                            Same as edr version (short alias)
+  edr doctor                       Health checks: Python, ports, relay, PATH, disk
   edr help                         Show this menu
 
 Names:
@@ -267,8 +269,8 @@ Edit sharer (only pass what you want to change):
   edr edit sharer <id|name> --network          Switch to LAN
   edr edit sharer <id|name> --non-network      Switch to relay
   edr edit sharer <id|name> --non-network --idnew   New Edrnko_ share code
-  edr edit sharer <id|name> --port <port> --auto --allow-self --skip-guard
-  edr edit sharer <id|name> --no-auto --no-allow-self --no-skip-guard
+  edr edit sharer <id|name> --port <port> --auto --watch --allow-self --skip-guard
+  edr edit sharer <id|name> --no-auto --no-watch --no-allow-self --no-skip-guard
 
 Create / share options:
   --port <port>        TCP port (default 5005)
@@ -280,8 +282,10 @@ Create / share options:
   --skip-guard         Skip EDR Guard scan when sending
   --include-cli        Include EDR's own Python files in the bundle
   --auto               Keep serving after each pull (profile or --auto on start)
+  --watch              Auto-detect folder changes while waiting (next pull gets latest)
   --once               One pull only when profile has auto enabled
   --dry-run            Show plan without opening a socket
+  --no-qr              Do not print a terminal QR for the pull command
 
 Pull / pack options:
   --to <dir>           Extract into a specific folder
@@ -298,11 +302,17 @@ Examples:
   edr pull Edrnko_abc123xyz --to C:\\Downloads\\MyGame-copy
   edr edit sharer MyGame --path C:\\Projects\\MyGame-v2
   edr rm share --id MyGame
-  edr create sharer . --id devbox --auto
+  edr create sharer . --id devbox --auto --watch
+  edr start devbox --watch
+  edr scan . --report guard-report
   edr pull 192.168.1.20 --port 5005 --allow-self
 
 Aliases:
   init=create   ls=list   run=start   serve=share   send=push
   recv=receive  st=status   v=version   directory=dir   setdir=set-dir
   remove=rm   delete=rm   clone=pull (receive)
+
+Watch mode (auto-share):
+  Watches the project folder while edr start is waiting. When files change,
+  the next pull receives the latest bundle. Use --watch on create, start, or share.
     """)

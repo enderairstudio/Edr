@@ -106,14 +106,19 @@ class RelayClient:
         url = f"{self.base_url}/v1/rooms/{room_id}/request"
         self._request("POST", url, data=b"")
 
-    def wait_for_pull_request(self, room_id, timeout=3600, poll_seconds=1):
+    def wait_for_pull_request(self, room_id, timeout=3600, poll_seconds=1, on_poll=None, on_poll_hit=None):
         url = f"{self.base_url}/v1/rooms/{room_id}/status"
         deadline = time.time() + timeout
+        announced = False
         while time.time() < deadline:
             payload = self._request("GET", url)
             status = json.loads(payload.decode("utf-8"))
             if status.get("requested"):
                 return True
+            if on_poll and on_poll():
+                if on_poll_hit and not announced:
+                    on_poll_hit()
+                    announced = True
             time.sleep(poll_seconds)
         raise TimeoutError(
             f"Timed out waiting for a pull on {relay_code(room_id)}. "
@@ -345,8 +350,13 @@ def request_pull(room_id, base_url=None):
     RelayClient(base_url).request_pull(room_id)
 
 
-def wait_for_pull_request(room_id, timeout=3600, base_url=None):
-    RelayClient(base_url).wait_for_pull_request(room_id, timeout=timeout)
+def wait_for_pull_request(room_id, timeout=3600, base_url=None, on_poll=None, on_poll_hit=None):
+    RelayClient(base_url).wait_for_pull_request(
+        room_id,
+        timeout=timeout,
+        on_poll=on_poll,
+        on_poll_hit=on_poll_hit,
+    )
 
 
 def upload_payload(room_id, data, on_progress=None, base_url=None):

@@ -15,6 +15,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Install Inno Setup
         run: choco install innosetup -y --no-progress
 
@@ -37,6 +42,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Build macOS package
         run: |
           perl -pi -e 's/\r$//' build-unix.sh scripts/edr scripts/install-macos.sh
@@ -55,6 +65,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install packaging tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq dpkg-dev
+
       - name: Build Linux package
         run: |
           sed -i 's/\r$//' build-unix.sh scripts/edr scripts/install-linux.sh
@@ -72,22 +90,28 @@ jobs:
   github-release:
     needs: [build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
-    if: needs.build-windows.result == 'success' && startsWith(github.ref, 'refs/tags/v')
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') &&
+      needs.build-windows.result == 'success' &&
+      needs.build-macos.result == 'success' &&
+      needs.build-linux.result == 'success'
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: EDR-Windows
           path: release
 
-      - name: Download macOS artifact (optional)
+      - name: Download macOS artifact
         if: needs.build-macos.result == 'success'
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: EDR-macOS
           path: release
 
-      - name: Download Linux artifact (optional)
+      - name: Download Linux artifact
         if: needs.build-linux.result == 'success'
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: EDR-Linux

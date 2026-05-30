@@ -8,7 +8,10 @@ $Root = $PSScriptRoot
 $DistEdr = Join-Path $Root "dist\edr"
 $InstallerDir = Join-Path $Root "dist\EDR-Setup"
 $SetupExe = Join-Path $Root "dist\EDR-Setup.exe"
-$AppFiles = @("command.py", "handler.py", "share.py", "print.py", "error.py", "relay.py", "guard.py")
+$AppFiles = @(
+    "command.py", "handler.py", "share.py", "print.py", "error.py", "relay.py", "guard.py",
+    "watch.py", "qrterm.py", "doctor_checks.py"
+)
 
 function Get-Iscc {
     @(
@@ -42,11 +45,32 @@ function Build-Launcher($OutDir) {
     if ($LASTEXITCODE -ne 0) { throw "Launcher compile failed" }
 }
 
+function Install-QrVendor($AppDir) {
+    $vendor = Join-Path $Root "build\qr_vendor"
+    if (Test-Path $vendor) { Remove-Item -LiteralPath $vendor -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $vendor | Out-Null
+    $py = if (Get-Command py -ErrorAction SilentlyContinue) { "py" } elseif (Get-Command python -ErrorAction SilentlyContinue) { "python" } else { $null }
+    if (-not $py) {
+        Write-Host "Python not found; skipping bundled qrcode (terminal QR may be unavailable)." -ForegroundColor Yellow
+        return
+    }
+    & $py -m pip install qrcode -t $vendor -q --disable-pip-version-check
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "pip install qrcode failed; terminal QR may be unavailable." -ForegroundColor Yellow
+        return
+    }
+    $pkg = Join-Path $vendor "qrcode"
+    if (Test-Path $pkg) {
+        Copy-Item -Recurse $pkg (Join-Path $AppDir "qrcode") -Force
+    }
+}
+
 function Copy-App($OutDir) {
     New-Item -ItemType Directory -Force -Path "$OutDir\app" | Out-Null
     foreach ($file in $AppFiles) {
         Copy-Item (Join-Path $Root $file) (Join-Path "$OutDir\app" $file) -Force
     }
+    Install-QrVendor (Join-Path $OutDir "app")
     Copy-Item "$Root\scripts\edr.cmd" (Join-Path $OutDir "edr.cmd") -Force
     Copy-Item "$Root\scripts\edr.ps1" (Join-Path $OutDir "edr.ps1") -Force
     Get-ChildItem "$OutDir\app\__pycache__" -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force

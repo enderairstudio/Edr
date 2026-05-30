@@ -9,6 +9,7 @@ import guard as g
 import print as p
 import relay as r
 import share as s
+import doctor_checks as doc
 
 STATE_DIR = ".edr"
 SHARERS_FILE = "sharers.json"
@@ -59,6 +60,7 @@ def build_parser():
     create_cmd.add_argument("--idnew", action="store_true", help="generate a new random relay id")
     create_cmd.add_argument("--allow-self", action="store_true", help="allow pulling from this same machine")
     create_cmd.add_argument("--skip-guard", action="store_true", help="skip EDR Guard scan when sharing")
+    create_cmd.add_argument("--watch", action="store_true", help="detect folder changes while sharing (auto-share)")
     create_cmd.add_argument("--name", help="display name for this sharer")
     create_cmd.set_defaults(func=cmd_create)
 
@@ -92,6 +94,8 @@ def build_parser():
     start_cmd.add_argument("--auto", action="store_true")
     start_cmd.add_argument("--dry-run", action="store_true")
     start_cmd.add_argument("--skip-guard", action="store_true", help="skip EDR Guard scan for this session")
+    start_cmd.add_argument("--watch", action="store_true", help="detect folder changes while waiting (auto-share)")
+    start_cmd.add_argument("--no-qr", action="store_true", help="do not print a pull QR code")
     start_cmd.set_defaults(func=cmd_start)
 
     share_cmd = subparsers.add_parser("share", aliases=["serve"], help="serve a folder without saving it", allow_abbrev=False)
@@ -129,6 +133,7 @@ def build_parser():
     scan_cmd = subparsers.add_parser("scan", help="run EDR Guard on a folder", allow_abbrev=False)
     scan_cmd.add_argument("path", nargs="?", default=".")
     scan_cmd.add_argument("--include-cli", action="store_true")
+    scan_cmd.add_argument("--report", metavar="FILE", help="export JSON guard report (also writes .txt)")
     scan_cmd.set_defaults(func=cmd_scan)
 
     status_cmd = subparsers.add_parser("status", aliases=["st"], help="show what a sharer would send", allow_abbrev=False)
@@ -164,6 +169,8 @@ def add_share_options(parser):
     parser.add_argument("--non-network", action="store_true")
     parser.add_argument("--idnew", action="store_true")
     parser.add_argument("--skip-guard", action="store_true", help="skip EDR Guard scan")
+    parser.add_argument("--watch", action="store_true", help="detect folder changes while waiting")
+    parser.add_argument("--no-qr", action="store_true", help="do not print a pull QR code")
 
 
 def add_edit_options(parser):
@@ -181,6 +188,8 @@ def add_edit_options(parser):
     parser.add_argument("--no-allow-self", action="store_true", default=argparse.SUPPRESS)
     parser.add_argument("--skip-guard", action="store_true", default=argparse.SUPPRESS)
     parser.add_argument("--no-skip-guard", action="store_true", default=argparse.SUPPRESS)
+    parser.add_argument("--watch", action="store_true", default=argparse.SUPPRESS)
+    parser.add_argument("--no-watch", action="store_true", default=argparse.SUPPRESS)
 
 
 def add_receive_options(parser):
@@ -229,6 +238,7 @@ def cmd_create(args):
         "non_network": non_network,
         "allow_self": args.allow_self,
         "skip_guard": args.skip_guard,
+        "watch": args.watch,
     }
     if display_name:
         entry["name"] = display_name
@@ -266,9 +276,10 @@ def cmd_list(args):
         network = "relay" if item.get("non_network") else "lan"
         code = item.get("relay_code", "")
         suffix = f"  code={code}" if code else ""
+        watch_flag = "  watch=yes" if item.get("watch") else ""
         p.key_value(
             format_sharer_label(item, share_id),
-            f"{item['path']}  port={item['port']}  auto={'yes' if item.get('auto') else 'no'}  net={network}{suffix}",
+            f"{item['path']}  port={item['port']}  auto={'yes' if item.get('auto') else 'no'}  net={network}{suffix}{watch_flag}",
         )
     return 0
 
@@ -337,7 +348,16 @@ def cmd_start(args):
     forever = args.auto or (item.get("auto") and not args.once)
     port = args.port or item["port"]
     skip_guard = args.skip_guard or item.get("skip_guard", False)
-    start_profile(item, port=port, forever=forever, dry_run=args.dry_run, skip_guard=skip_guard)
+    watch = args.watch or item.get("watch", False)
+    start_profile(
+        item,
+        port=port,
+        forever=forever,
+        dry_run=args.dry_run,
+        skip_guard=skip_guard,
+        watch=watch,
+        show_qr=not args.no_qr,
+    )
     return 0
 
 
@@ -357,6 +377,8 @@ def cmd_share(args):
         non_network=args.non_network,
         relay_id=relay_id,
         skip_guard=args.skip_guard,
+        watch=args.watch,
+        show_qr=not args.no_qr,
     )
     return 0
 
@@ -407,6 +429,27 @@ def cmd_pack(args):
 
 def cmd_scan(args):
     folder = resolve_folder(args.path)
+
+    if args.report:
+        p.progress("running security scan", 0)
+
+        def on_progress(percent):
+            p.progress("running security scan", percent)
+
+        report = g.scan_project_report(folder, args.include_cli, on_progress=on_progress)
+        p.progress("running security scan", 100)
+        json_path, text_path = g.write_guard_report(report, args.report)
+        if report["clean"]:
+            p.success(f"EDR Guard: {report['file_count']} files clean — report saved.")
+        else:
+            p.warn(f"EDR Guard: {report['threat_count']} threat(s) — report saved.")
+        p.key_value("JSON", json_path)
+        if text_path:
+            p.key_value("Text", text_path)
+        if not report["clean"]:
+            raise e.CliError("Threats found. See report for details.")
+        return 0
+
     count = g.require_clean_project(folder, args.include_cli)
     p.success(f"EDR Guard: {count} files clean — safe to share.")
     return 0
@@ -448,39 +491,30 @@ def cmd_version(args):
 
 def cmd_doctor(args):
     handler_path = Path(__file__).resolve()
-    p.key_value("Version", p.VERSION)
-    p.key_value("Python", sys.executable)
-    p.key_value("Command", handler_path.with_name("command.py"))
-    p.key_value("Handler", handler_path)
-    p.key_value("Relay URL", r.relay_base_url())
+    p.section("EDR doctor")
     p.key_value("CWD", Path.cwd())
-    p.key_value("ARGV", " ".join(sys.argv))
+    p.key_value("Relay URL", r.relay_base_url())
 
-    if sys.platform == "win32":
-        import subprocess
+    fails = 0
+    warns = 0
+    for level, message in doc.run_all(handler_path):
+        if level == "ok":
+            p.success(message)
+        elif level == "warn":
+            p.warn(message)
+            warns += 1
+        else:
+            p.warn(f"[fail] {message}")
+            fails += 1
 
-        p.section("edr on PATH (first wins in cmd)")
-        try:
-            result = subprocess.run(
-                ["where.exe", "edr"],
-                capture_output=True,
-                text=True,
-                check=False,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-            if not lines:
-                p.warn("No 'edr' found on PATH.")
-            for index, line in enumerate(lines):
-                p.key_value(f"where[{index}]", line)
-                lower = line.lower()
-                if "npm" in lower and ("@enderair" in lower or "node_modules" in lower):
-                    p.warn("Old npm @enderair/edr is still on PATH — run: npm uninstall -g @enderair/edr")
-                if index == 0 and "appdata\\local\\edr" not in lower.replace("/", "\\"):
-                    p.warn("First 'edr' is not %LOCALAPPDATA%\\EDR — reinstall or fix PATH order.")
-        except OSError as err:
-            p.warn(f"where.exe failed: {err}")
-
+    p.section("Summary")
+    if fails:
+        p.error(f"{fails} failure(s), {warns} warning(s)")
+        return 1
+    if warns:
+        p.warn(f"All critical checks passed with {warns} warning(s)")
+    else:
+        p.success("All checks passed")
     return 0
 
 
@@ -509,7 +543,7 @@ def receive_allows_self(args):
     return False
 
 
-def start_profile(item, port=None, forever=False, dry_run=False, skip_guard=False):
+def start_profile(item, port=None, forever=False, dry_run=False, skip_guard=False, watch=False, show_qr=True):
     folder = Path(item["path"])
     summary = s.project_summary(root_dir=folder, include_cli=item.get("include_cli", False))
     if summary["files"] == 0:
@@ -528,6 +562,8 @@ def start_profile(item, port=None, forever=False, dry_run=False, skip_guard=Fals
         non_network=item.get("non_network", False),
         relay_id=item.get("relay_id"),
         skip_guard=skip_guard,
+        watch=watch,
+        show_qr=show_qr,
     )
 
 
@@ -662,6 +698,13 @@ def apply_sharer_edits(store, key, item, args):
         item["skip_guard"] = False
         changed = True
 
+    if hasattr(args, "watch"):
+        item["watch"] = True
+        changed = True
+    if hasattr(args, "no_watch"):
+        item["watch"] = False
+        changed = True
+
     if hasattr(args, "network"):
         if item.get("non_network"):
             item["non_network"] = False
@@ -694,6 +737,7 @@ def _print_sharer_details(item, share_id):
     p.key_value("Folder", item["path"])
     p.key_value("Port", item["port"])
     p.key_value("Auto", "yes" if item.get("auto") else "no")
+    p.key_value("Watch", "yes" if item.get("watch") else "no")
     if item.get("name"):
         p.key_value("Name", item["name"])
     if item.get("non_network"):

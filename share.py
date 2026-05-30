@@ -9,13 +9,18 @@ import zipfile
 import error as e
 import guard as g
 import print as p
+import qrterm as qr
 import relay as r
+import watch as w
 
 DEFAULT_PORT = 5005
 PROTOCOL_MAGIC = b"EDR1"
 IGNORE_DIRS = {'.edr', '.git', '__pycache__', 'venv', '.venv', 'node_modules', '.mypy_cache', '.pytest_cache', 'dist', 'build', 'python', 'launcher'}
 IGNORE_FILES = {'project_payload.zip'}
-CLI_FILES = {'command.py', 'handler.py', 'share.py', 'error.py', 'print.py', 'relay.py', 'guard.py'}
+CLI_FILES = {
+    'command.py', 'handler.py', 'share.py', 'error.py', 'print.py', 'relay.py', 'guard.py',
+    'watch.py', 'qrterm.py', 'doctor_checks.py',
+}
 
 
 def get_local_ip():
@@ -139,6 +144,12 @@ def bundle_to_file(output_path="project_payload.zip", root_dir=".", include_cli=
     return target, len(data)
 
 
+def _print_pull_qr(remote, port=None):
+    text = qr.pull_command_text(remote, port=port)
+    p.info(f"Scan to pull: {text}")
+    qr.print_qr(text)
+
+
 def start_server(
     root_dir=".",
     port=DEFAULT_PORT,
@@ -150,6 +161,8 @@ def start_server(
     relay_id=None,
     relay_url=None,
     skip_guard=False,
+    watch=False,
+    show_qr=True,
 ):
     root = Path(root_dir).resolve()
     summary = project_summary(root, include_cli)
@@ -162,17 +175,23 @@ def start_server(
     p.key_value("Files", summary["files"])
     p.key_value("Payload", format_bytes(summary["bytes"]))
     p.key_value("Mode", "auto" if forever else "once")
+    if watch:
+        p.key_value("Watch", "on (auto-detect folder changes)")
 
     if non_network and relay_id:
         p.key_value("Network", "relay (anywhere)")
         p.key_value("Share code", code)
         p.key_value("Relay", relay_url or r.relay_base_url())
         p.info(f"Pull command: edr pull {code}")
+        if show_qr:
+            _print_pull_qr(code)
     else:
         local_ip = get_local_ip()
         p.key_value("IP", local_ip)
         p.key_value("Port", port)
         p.info(f"Pull command: edr pull {local_ip} --port {port}")
+        if show_qr:
+            _print_pull_qr(local_ip, port=port)
 
     if dry_run:
         if not skip_guard:
@@ -181,14 +200,16 @@ def start_server(
         return
 
     if non_network and relay_id:
-        _serve_via_relay(root, include_cli, share_id, relay_id, forever, relay_url, skip_guard)
+        _serve_via_relay(root, include_cli, share_id, relay_id, forever, relay_url, skip_guard, watch=watch)
         return
 
-    _serve_via_tcp(root, port, include_cli, share_id, forever, skip_guard)
+    _serve_via_tcp(root, port, include_cli, share_id, forever, skip_guard, watch=watch)
 
 
-def _serve_via_tcp(root, port, include_cli, share_id, forever, skip_guard=False):
+def _serve_via_tcp(root, port, include_cli, share_id, forever, skip_guard=False, watch=False):
     local_ip = get_local_ip()
+    watcher = w.ProjectWatcher(root, include_cli) if watch else None
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.bind(('0.0.0.0', port))
@@ -197,7 +218,22 @@ def _serve_via_tcp(root, port, include_cli, share_id, forever, skip_guard=False)
         p.info(f"Waiting for receivers at {local_ip}:{port}")
 
         while True:
-            conn, addr = server.accept()
+            if watcher:
+                server.settimeout(watcher.poll_seconds)
+                try:
+                    while True:
+                        try:
+                            conn, addr = server.accept()
+                            break
+                        except socket.timeout:
+                            if watcher.check():
+                                p.info("Project changed — next pull will send the latest files.")
+                                watcher.mark_announced()
+                finally:
+                    server.settimeout(None)
+            else:
+                conn, addr = server.accept()
+
             with conn:
                 p.progress("waiting for receiver", 100)
                 p.success(f"Connected by {addr[0]}:{addr[1]}")
@@ -207,9 +243,10 @@ def _serve_via_tcp(root, port, include_cli, share_id, forever, skip_guard=False)
             p.progress("waiting for receiver", 0)
 
 
-def _serve_via_relay(root, include_cli, share_id, relay_id, forever, relay_url, skip_guard=False):
+def _serve_via_relay(root, include_cli, share_id, relay_id, forever, relay_url, skip_guard=False, watch=False):
     base = r.ensure_relay_available(relay_url)
     code = r.relay_code(relay_id)
+    watcher = w.ProjectWatcher(root, include_cli) if watch else None
 
     while True:
         r.register_waiting_room(relay_id, base_url=base)
@@ -218,7 +255,19 @@ def _serve_via_relay(root, include_cli, share_id, relay_id, forever, relay_url, 
         p.info(f"On another device: edr pull {code}")
 
         try:
-            r.wait_for_pull_request(relay_id, base_url=base)
+            if watcher:
+                def _on_watch_change():
+                    p.info("Project changed — next pull will send the latest files.")
+                    watcher.mark_announced()
+
+                r.wait_for_pull_request(
+                    relay_id,
+                    base_url=base,
+                    on_poll=watcher.check,
+                    on_poll_hit=_on_watch_change,
+                )
+            else:
+                r.wait_for_pull_request(relay_id, base_url=base)
         except TimeoutError as err:
             p.error(str(err))
             return

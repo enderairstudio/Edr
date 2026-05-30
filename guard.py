@@ -1,6 +1,8 @@
 """EDR Guard — blocks dangerous files and known malicious patterns before share/receive."""
 
+import json
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 import error as e
@@ -130,6 +132,82 @@ def scan_project(root_dir=".", include_cli=False, on_progress=None):
 
     files = list(iter_project_files(root_dir, include_cli))
     return scan_project_files(files, on_progress=on_progress)
+
+
+def scan_project_report(root_dir=".", include_cli=False, on_progress=None):
+    """
+    Scan all project files; return a report dict (does not raise on threats).
+  """
+    from share import iter_project_files
+
+    root = Path(root_dir).resolve()
+    files = list(iter_project_files(root, include_cli))
+    scanned = []
+    threats = []
+
+    total = len(files) or 1
+    for index, (path, archive_name) in enumerate(files, start=1):
+        rel = archive_name.as_posix() if hasattr(archive_name, "as_posix") else str(archive_name)
+        entry = {"path": rel, "bytes": path.stat().st_size}
+        try:
+            scan_path(Path(path), archive_name=rel)
+            entry["status"] = "clean"
+        except ThreatFound as threat:
+            entry["status"] = "blocked"
+            entry["reason"] = threat.reason
+            threats.append({"path": threat.path, "reason": threat.reason})
+        except OSError as err:
+            entry["status"] = "error"
+            entry["reason"] = str(err)
+        scanned.append(entry)
+        if on_progress:
+            on_progress(int(index * 100 / total))
+
+    return {
+        "version": 1,
+        "tool": "EDR Guard",
+        "scanned_at": datetime.now(timezone.utc).isoformat(),
+        "root": str(root),
+        "include_cli": include_cli,
+        "file_count": len(scanned),
+        "clean": len(threats) == 0,
+        "threat_count": len(threats),
+        "threats": threats,
+        "files": scanned,
+    }
+
+
+def write_guard_report(report, output_path, also_text=True):
+    """Write JSON report; optional human-readable .txt alongside."""
+    target = Path(output_path)
+    if target.suffix.lower() != ".json":
+        target = target.with_suffix(".json")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(report, indent=2), encoding="utf-8")
+
+    text_path = None
+    if also_text:
+        text_path = target.with_suffix(".txt")
+        lines = [
+            f"EDR Guard report — {report.get('scanned_at', '')}",
+            f"Root: {report.get('root', '')}",
+            f"Files scanned: {report.get('file_count', 0)}",
+            f"Status: {'CLEAN' if report.get('clean') else 'THREATS FOUND'}",
+            "",
+        ]
+        if report.get("threats"):
+            lines.append("Threats:")
+            for item in report["threats"]:
+                lines.append(f"  - {item['path']}: {item['reason']}")
+            lines.append("")
+        lines.append("Files:")
+        for item in report.get("files", []):
+            status = item.get("status", "?")
+            suffix = f" ({item['reason']})" if item.get("reason") else ""
+            lines.append(f"  [{status}] {item.get('path', '')}{suffix}")
+        text_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    return target, text_path
 
 
 def scan_zip_buffer(buffer, on_progress=None):

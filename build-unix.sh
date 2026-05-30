@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 PLATFORM="${1:-}"
 DIST="$ROOT/dist"
 PAYLOAD="$DIST/edr-unix"
-APP_FILES=(command.py handler.py share.py print.py error.py relay.py guard.py)
+APP_FILES=(command.py handler.py share.py print.py error.py relay.py guard.py watch.py qrterm.py doctor_checks.py)
 
 if [[ "$PLATFORM" != "macos" && "$PLATFORM" != "linux" ]]; then
   echo "Usage: ./build-unix.sh macos|linux"
@@ -40,6 +40,20 @@ mkdir -p "$PAYLOAD/app"
 for file in "${APP_FILES[@]}"; do
   cp "$ROOT/$file" "$PAYLOAD/app/"
 done
+
+install_qrcode_vendor() {
+  local app_dir="$1"
+  local vendor="$ROOT/build/qr_vendor"
+  rm -rf "$vendor"
+  mkdir -p "$vendor"
+  if python3 -m pip install qrcode -t "$vendor" -q --disable-pip-version-check 2>/dev/null; then
+    cp -R "$vendor/qrcode" "$app_dir/qrcode"
+  else
+    echo "Warning: pip install qrcode failed; terminal QR may be unavailable."
+  fi
+}
+install_qrcode_vendor "$PAYLOAD/app"
+
 cp "$ROOT/scripts/edr" "$PAYLOAD/edr"
 chmod +x "$PAYLOAD/edr"
 
