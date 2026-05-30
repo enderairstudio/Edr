@@ -216,103 +216,115 @@ def prompt_name_countdown(seconds=3):
     return result[0]
 
 
+_HELP_WIDTH = 70
+_HELP_CMD_COL = 38
+
+
+def _help_rule(char="="):
+    print(char * _HELP_WIDTH)
+
+
+def _help_blank():
+    print()
+
+
+def _help_heading(text):
+    print(f"  {text}")
+
+
+def _help_section(title):
+    _help_blank()
+    print(f"  >> {title}")
+    print(f"  {'-' * (len(title) + 2)}")
+
+
+def _help_cmd(command, description):
+    print(f"    {command:<{_HELP_CMD_COL}}{description}")
+
+
+def _help_note(text):
+    print(f"      {text}")
+
+
+def _help_flow(steps):
+    for index, step in enumerate(steps, start=1):
+        print(f"    {index}. {step}")
+
+
 def help_menu():
-    print(f"""
-EDR CLI - Project Sharer  (v{VERSION})
+    """Print the EDR command reference (ASCII-safe for Windows consoles)."""
+    progress_finish()
+    store = "%USERPROFILE%\\.edr\\sharers.json"
 
-Sharer setup (saved profiles in %USERPROFILE%\\.edr\\sharers.json):
-  edr create [sharer] [folder]     Create a sharer (keyword 'sharer' is optional)
-  edr list                         List sharers (shows display name + id)
-  edr edit sharer [id|name]        Edit folder, name, LAN/relay, ports, flags
-  edr rm share --id <id|name>      Delete a saved sharer
-  edr dir [id|name]                Print a sharer's folder path
-  edr set-dir <id|name> <folder>   Change only the folder
-  edr status [id|name]             Show file count and payload size
+    _help_rule()
+    title = "  EDR Project Sharer"
+    version_label = f"v{VERSION}"
+    print(title + version_label.rjust(_HELP_WIDTH - len(title)))
+    print("  Share folders over LAN or relay  |  EDR Guard scans every transfer")
+    print(f"  Saved profiles: {store}")
+    _help_rule()
 
-Share and receive:
-  edr start [id|name]              Serve a saved sharer (waits until pull finishes)
-  edr push [id|name]               Serve a saved sharer once
-  edr pull <ip|Edrnko_id>          Receive a project (LAN IP or relay code)
-  edr share [folder]               One-off share without saving a profile
-  edr relay start                  Run relay server (for --non-network / cross-network)
+    _help_section("Quick start")
+    _help_flow([
+        "LAN:   edr create sharer <folder> [--id myapp]  then  edr start myapp",
+        "Relay: edr create sharer <folder> --non-network --idnew  then  edr start <id>",
+        "Pull:  edr pull <ip>  or  edr pull Edrnko_<id>  (QR shown when sharing)",
+    ])
 
-Other:
-  edr pack [zip]                   Zip a folder locally
-  edr scan [folder]                Run EDR Guard only (no transfer)
-  edr scan [folder] --report out   Export Guard report (out.json + out.txt)
-  edr ip                           Show this PC's LAN IP for edr pull <ip>
-  edr version                      Show CLI version
-  edr v                            Same as edr version (short alias)
-  edr doctor                       Health checks: Python, ports, relay, PATH, disk
-  edr help                         Show this menu
+    _help_section("Profiles")
+    _help_cmd("edr create [sharer] [folder]", "Save a reusable sharer profile")
+    _help_cmd("edr list", "List saved sharers (name + id)")
+    _help_cmd("edr edit sharer [id|name]", "Change path, name, LAN/relay, flags")
+    _help_cmd("edr rm share --id <id|name>", "Delete a profile")
+    _help_cmd("edr dir [id|name]", "Show profile folder path")
+    _help_cmd("edr set-dir <id|name> <folder>", "Change folder only")
+    _help_cmd("edr status [id|name]", "Files + payload size for a profile")
 
-Names:
-  edr create sharer . --name MyGame          Set a display name
-  edr create sharer . --name-MyGame          Same (--name- prefix form)
-  (no --name)                                3s countdown to type a name, or stay nameless
-  start / edit / rm / dir / status           Accept id, relay id, or display name
+    _help_section("Share and receive")
+    _help_cmd("edr start [id|name]", "Serve until pull completes (+ QR code)")
+    _help_cmd("edr push [id|name]", "Serve once from a saved profile")
+    _help_cmd("edr share [folder]", "One-off share (no profile)")
+    _help_cmd("edr pull <ip|Edrnko_id>", "Download a shared project")
+    _help_cmd("edr relay start", "Relay server (cross-network; optional)")
 
-Relay sharing (any network, same relay URL on all PCs):
-  edr create sharer <folder> --non-network --idnew [--name X] [--allow-self]
-  edr start <id|name>                          Stays up until receiver finishes download
-  edr pull Edrnko_<id>                         On another PC (set EDR_RELAY_URL if needed)
-  edr relay start                              Optional; localhost relay auto-starts on start
+    _help_section("Tools")
+    _help_cmd("edr pack [zip]", "Zip a folder locally")
+    _help_cmd("edr scan [folder]", "Run EDR Guard (no transfer)")
+    _help_cmd("edr scan [folder] --report <file>", "Export Guard report (.json + .txt)")
+    _help_cmd("edr ip", "Show this PC's LAN IP")
+    _help_cmd("edr doctor", "Health check: Python, ports, relay, PATH")
+    _help_cmd("edr version  |  edr v", "Show version")
+    _help_cmd("edr help", "Show this menu")
 
-LAN sharing (same Wi-Fi / Ethernet):
-  edr create sharer <folder> [--name X] [--id myapp]
-  edr start <id|name>
-  edr pull <ip> --port 5005                    On another device on the LAN
+    _help_section("Common flags")
+    _help_cmd("--watch", "While waiting, detect folder changes (auto-share)")
+    _help_cmd("--auto", "Keep serving after each pull")
+    _help_cmd("--non-network", "Relay mode (Edrnko_ code)")
+    _help_cmd("--idnew", "New random relay id")
+    _help_cmd("--name <name>", "Display name (3s prompt if omitted)")
+    _help_cmd("--port <port>", "LAN TCP port (default 5005)")
+    _help_cmd("--allow-self", "Allow pull on this same PC")
+    _help_cmd("--skip-guard", "Skip security scan when sending")
+    _help_cmd("--no-qr", "Hide terminal QR on share")
+    _help_cmd("--to <dir>  --force", "Pull destination / overwrite")
 
-Edit sharer (only pass what you want to change):
-  edr edit sharer <id|name> --path <folder>
-  edr edit sharer <id|name> --name <name>      Use --name with empty value to clear name
-  edr edit sharer <id|name> --network          Switch to LAN
-  edr edit sharer <id|name> --non-network      Switch to relay
-  edr edit sharer <id|name> --non-network --idnew   New Edrnko_ share code
-  edr edit sharer <id|name> --port <port> --auto --watch --allow-self --skip-guard
-  edr edit sharer <id|name> --no-auto --no-watch --no-allow-self --no-skip-guard
+    _help_section("Relay vs LAN")
+    _help_note("Relay (any network): same EDR_RELAY_URL on every PC")
+    _help_cmd("edr create sharer <folder> --non-network --idnew", "Create relay profile")
+    _help_cmd("edr pull Edrnko_<id>", "Receive on another machine")
+    _help_blank()
+    _help_note("LAN (same Wi-Fi): use IP from edr ip")
+    _help_cmd("edr pull <ip> --port 5005", "Receive on another device")
 
-Create / share options:
-  --port <port>        TCP port (default 5005)
-  --name <name>        Display name (3s prompt if omitted on create)
-  --id <id>            Sharer id (LAN mode; auto-generated if omitted)
-  --non-network        Use relay (Edrnko_ code) instead of LAN IP
-  --idnew              New random relay id (create or edit)
-  --allow-self         Allow pull from this same PC (testing)
-  --skip-guard         Skip EDR Guard scan when sending
-  --include-cli        Include EDR's own Python files in the bundle
-  --auto               Keep serving after each pull (profile or --auto on start)
-  --watch              Auto-detect folder changes while waiting (next pull gets latest)
-  --once               One pull only when profile has auto enabled
-  --dry-run            Show plan without opening a socket
-  --no-qr              Do not print a terminal QR for the pull command
+    _help_section("Examples")
+    _help_cmd("edr create sharer . --id devbox --watch", "Profile with auto-share")
+    _help_cmd("edr start devbox", "Share and show pull QR")
+    _help_cmd("edr scan . --report guard-report", "Write guard-report.json/.txt")
+    _help_cmd("edr pull 192.168.1.20 --to .\\copy --force", "LAN pull into folder")
 
-Pull / pack options:
-  --to <dir>           Extract into a specific folder
-  --force              Overwrite existing files
-
-Compatibility:
-  edr create share                 Same as: edr share .
-  edr connect sharer --<ip>        Same as: edr pull <ip>
-  edr rm share --id-<id>           Same as: edr rm share --id <id>
-
-Examples:
-  edr create sharer C:\\Projects\\MyGame --non-network --idnew --name MyGame
-  edr start MyGame
-  edr pull Edrnko_abc123xyz --to C:\\Downloads\\MyGame-copy
-  edr edit sharer MyGame --path C:\\Projects\\MyGame-v2
-  edr rm share --id MyGame
-  edr create sharer . --id devbox --auto --watch
-  edr start devbox --watch
-  edr scan . --report guard-report
-  edr pull 192.168.1.20 --port 5005 --allow-self
-
-Aliases:
-  init=create   ls=list   run=start   serve=share   send=push
-  recv=receive  st=status   v=version   directory=dir   setdir=set-dir
-  remove=rm   delete=rm   clone=pull (receive)
-
-Watch mode (auto-share):
-  Watches the project folder while edr start is waiting. When files change,
-  the next pull receives the latest bundle. Use --watch on create, start, or share.
-    """)
+    _help_rule("-")
+    print("  Aliases: v=version  ls=list  run=start  serve=share  send=push")
+    print("           init=create  st=status  recv=receive  dir=directory")
+    print("  Names: start/edit/rm/dir/status accept id, relay id, or display name")
+    _help_rule()
+    _help_blank()
