@@ -33,7 +33,6 @@ jobs:
           name: EDR-Windows
           path: |
             dist/EDR-Setup.exe
-            dist/EDR-Setup/**
             dist/EDR-Install.zip
             dist/EDR-win64.zip
 
@@ -102,33 +101,61 @@ jobs:
           path: release
 
       - name: Download macOS artifact
-        if: needs.build-macos.result == 'success'
-        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: EDR-macOS
-          path: release
+          path: release/macos
 
       - name: Download Linux artifact
-        if: needs.build-linux.result == 'success'
-        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: EDR-Linux
-          path: release
+          path: release/linux
+
+      - name: Stage release assets
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          shopt -s nullglob
+          pick() {
+            for path in "$@"; do
+              if [ -f "$path" ]; then
+                name="$(basename "$path")"
+                cp "$path" "release-assets/$name"
+                echo "  + $name"
+                return 0
+              fi
+            done
+            return 1
+          }
+          echo "Collecting installers:"
+          pick release/**/EDR-Setup.exe release/EDR-Setup.exe
+          pick release/**/EDR-Install.zip release/EDR-Install.zip
+          pick release/**/EDR-win64.zip release/EDR-win64.zip
+          pick release/macos/**/EDR-Setup.dmg release/macos/EDR-Setup.dmg
+          pick release/linux/**/EDR-Setup.deb release/linux/EDR-Setup.deb
+          ls -la release-assets/
+          count="$(find release-assets -maxdepth 1 -type f | wc -l)"
+          if [ "$count" -lt 3 ]; then
+            echo "Expected at least 3 release files (Windows + macOS + Linux)."
+            find release -type f | head -50 || true
+            exit 1
+          fi
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mapfile -t files < <(find release -type f | sort)
-          if [ "${#files[@]}" -eq 0 ]; then
-            echo "No release files found under release/"
-            find release || true
-            exit 1
-          fi
+          set -euo pipefail
+          shopt -s nullglob
+          files=(release-assets/*)
           printf 'Publishing:\n  %s\n' "${files[@]}"
-          gh release create "${GITHUB_REF_NAME}" \
-            --repo "${GITHUB_REPOSITORY}" \
-            --generate-notes \
-            "${files[@]}"
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" "${files[@]}" \
+              --repo "${GITHUB_REPOSITORY}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" "${files[@]}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${GITHUB_REF_NAME}" \
+              --generate-notes
+          fi
