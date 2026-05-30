@@ -7,9 +7,10 @@ import error as e
 import print as p
 
 # Extensions that must never be shared (executables / script droppers).
+# Executable / script-launcher types. Web assets (.js, .html) are scanned by content instead.
 BLOCKED_EXTENSIONS = {
     ".exe", ".msi", ".msp", ".msm", ".scr", ".com", ".pif", ".cpl",
-    ".bat", ".cmd", ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse",
+    ".bat", ".cmd", ".ps1", ".psm1", ".vbs", ".vbe",
     ".ws", ".wsf", ".wsc", ".wsh", ".hta", ".jar", ".dll", ".sys",
     ".drv", ".ocx", ".reg", ".inf", ".lnk", ".iso", ".img",
 }
@@ -157,9 +158,16 @@ def scan_zip_buffer(buffer, on_progress=None):
     return len(members)
 
 
-def require_clean_project(root_dir=".", include_cli=False):
+def require_clean_project(root_dir=".", include_cli=False, skip=False):
     """Run guard scan; abort share via CliError on threat."""
+    if skip:
+        return 0
     try:
+        from share import iter_project_files
+
+        files = list(iter_project_files(root_dir, include_cli))
+        total_bytes = sum(path.stat().st_size for path, _ in files)
+        p.configure_workload(files=len(files), bytes_=total_bytes)
         p.progress("running security scan", 0)
 
         def on_progress(percent):

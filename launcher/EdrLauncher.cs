@@ -36,11 +36,17 @@ internal static class EdrLauncher
             cmd.Append(QuoteArgument(arg));
         }
 
+        string workDir = Directory.GetCurrentDirectory();
+        if (string.IsNullOrWhiteSpace(workDir) || !Directory.Exists(workDir))
+        {
+            workDir = appDir;
+        }
+
         var start = new ProcessStartInfo
         {
             FileName = pythonExe,
             Arguments = cmd.ToString(),
-            WorkingDirectory = appDir,
+            WorkingDirectory = workDir,
             UseShellExecute = false,
         };
 

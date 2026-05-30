@@ -100,11 +100,13 @@ def build_manifest(root_dir=".", include_cli=False, share_id=None, non_network=F
 
 
 def bundle_to_memory(root_dir=".", include_cli=False, verbose=False, skip_guard=False):
+    files = list(iter_project_files(root_dir, include_cli))
+    total_bytes = sum(path.stat().st_size for path, _ in files)
+    p.configure_workload(files=len(files), bytes_=total_bytes)
     if not skip_guard:
         g.require_clean_project(root_dir, include_cli)
     memory_file = io.BytesIO()
     try:
-        files = list(iter_project_files(root_dir, include_cli))
         total = len(files)
         if verbose:
             p.progress("scanning project", 0)
@@ -127,12 +129,12 @@ def bundle_to_memory(root_dir=".", include_cli=False, verbose=False, skip_guard=
         e.handle_error("BundleError", str(err))
 
 
-def bundle_to_file(output_path="project_payload.zip", root_dir=".", include_cli=False, force=False):
+def bundle_to_file(output_path="project_payload.zip", root_dir=".", include_cli=False, force=False, skip_guard=False):
     target = Path(output_path)
     if target.exists() and not force:
         e.handle_error("FileExists", f"{target} already exists. Use --force to overwrite it.")
 
-    data = bundle_to_memory(root_dir, include_cli)
+    data = bundle_to_memory(root_dir, include_cli, skip_guard=skip_guard)
     target.write_bytes(data)
     return target, len(data)
 
@@ -147,9 +149,11 @@ def start_server(
     non_network=False,
     relay_id=None,
     relay_url=None,
+    skip_guard=False,
 ):
     root = Path(root_dir).resolve()
     summary = project_summary(root, include_cli)
+    p.configure_workload(files=summary["files"], bytes_=summary["bytes"])
     code = r.relay_code(relay_id) if relay_id else None
 
     if share_id:
@@ -171,18 +175,19 @@ def start_server(
         p.info(f"Pull command: edr pull {local_ip} --port {port}")
 
     if dry_run:
-        g.require_clean_project(root, include_cli)
+        if not skip_guard:
+            g.require_clean_project(root, include_cli)
         p.info("Dry run complete. No network socket was opened.")
         return
 
     if non_network and relay_id:
-        _serve_via_relay(root, include_cli, share_id, relay_id, forever, relay_url)
+        _serve_via_relay(root, include_cli, share_id, relay_id, forever, relay_url, skip_guard)
         return
 
-    _serve_via_tcp(root, port, include_cli, share_id, forever)
+    _serve_via_tcp(root, port, include_cli, share_id, forever, skip_guard)
 
 
-def _serve_via_tcp(root, port, include_cli, share_id, forever):
+def _serve_via_tcp(root, port, include_cli, share_id, forever, skip_guard=False):
     local_ip = get_local_ip()
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -196,13 +201,13 @@ def _serve_via_tcp(root, port, include_cli, share_id, forever):
             with conn:
                 p.progress("waiting for receiver", 100)
                 p.success(f"Connected by {addr[0]}:{addr[1]}")
-                _send_once(conn, root, include_cli, share_id, network_label="LAN")
+                _send_once(conn, root, include_cli, share_id, network_label="LAN", skip_guard=skip_guard)
             if not forever:
                 break
             p.progress("waiting for receiver", 0)
 
 
-def _serve_via_relay(root, include_cli, share_id, relay_id, forever, relay_url):
+def _serve_via_relay(root, include_cli, share_id, relay_id, forever, relay_url, skip_guard=False):
     base = r.ensure_relay_available(relay_url)
     code = r.relay_code(relay_id)
 
@@ -228,7 +233,7 @@ def _serve_via_relay(root, include_cli, share_id, relay_id, forever, relay_url):
             non_network=True,
             relay_code=code,
         )
-        data = bundle_to_memory(root, include_cli, verbose=True)
+        data = bundle_to_memory(root, include_cli, verbose=True, skip_guard=skip_guard)
         p.progress("sharing files", 0)
         payload = _encode_payload(manifest, data)
         p.progress("sharing files", 50)
@@ -237,17 +242,24 @@ def _serve_via_relay(root, include_cli, share_id, relay_id, forever, relay_url):
             p.progress("sharing files", min(99, 50 + percent // 2))
 
         r.upload_payload(relay_id, payload, on_progress=upload_progress, base_url=base)
+        p.progress("sharing files", 90)
+        p.info("Waiting for receiver to finish downloading …")
+        try:
+            r.wait_until_consumed(relay_id, base_url=base)
+        except TimeoutError as err:
+            p.error(str(err))
+            return
         p.progress("sharing files", 100)
-        p.success(f"Shared {format_bytes(len(payload))} via relay.")
+        p.success(f"Shared {format_bytes(len(payload))} via relay — receiver finished.")
         if not forever:
             break
         p.info("Waiting for the next pull …")
 
 
-def _send_once(conn, root, include_cli, share_id, network_label="LAN"):
+def _send_once(conn, root, include_cli, share_id, network_label="LAN", skip_guard=False):
     p.progress("preparing share", 0)
     manifest = build_manifest(root, include_cli, share_id)
-    data = bundle_to_memory(root, include_cli, verbose=True)
+    data = bundle_to_memory(root, include_cli, verbose=True, skip_guard=skip_guard)
     p.progress("sharing files", 0)
     send_payload(conn, manifest, data)
     p.progress("sharing files", 100)
@@ -301,6 +313,7 @@ def receive_project(ip_pin, port=DEFAULT_PORT, target_dir=None, force=False, rel
 def _receive_via_relay(relay_id, relay_code, target_dir, force, relay_url):
     try:
         base = r.ensure_relay_available(relay_url)
+        p.configure_workload(files=1, bytes_=1024 * 1024)
         p.progress("connecting to relay", 0)
         p.key_value("Share code", relay_code)
         p.key_value("Relay", base)
@@ -310,11 +323,23 @@ def _receive_via_relay(relay_id, relay_code, target_dir, force, relay_url):
         def download_progress(percent):
             p.progress("downloading project", percent)
 
-        raw = r.download_payload(relay_id, on_progress=download_progress, base_url=base)
+        try:
+            raw = r.download_payload(relay_id, on_progress=download_progress, base_url=base)
+        except TimeoutError:
+            raise e.CliError(
+                f"No sender is sharing {relay_code} right now. "
+                f"On the sharing PC run: edr start <id>  (then pull again)."
+            ) from None
         p.progress("connecting to relay", 100)
         manifest, zip_buffer = parse_payload(raw)
         g.require_clean_archive(zip_buffer)
         zip_buffer.seek(0)
+        file_count = manifest.get("file_count")
+        try:
+            file_count = int(file_count)
+        except (TypeError, ValueError):
+            file_count = len(manifest.get("files", [])) or 1
+        p.configure_workload(files=file_count, bytes_=len(raw))
         destination = choose_target_dir(manifest, target_dir, force)
         p.key_value("Folder", destination)
         p.key_value("Files", manifest.get("file_count", "unknown"))

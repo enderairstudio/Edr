@@ -9,7 +9,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "EDR Project Sharer"
-APP_VERSION = "0.5.7"
+APP_VERSION = "0.5.8"
 SYSTEM = platform.system()
 
 COLORS = {

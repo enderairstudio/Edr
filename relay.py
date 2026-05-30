@@ -120,6 +120,25 @@ class RelayClient:
             f"On another device run: edr pull {relay_code(room_id)}"
         )
 
+    def room_status(self, room_id):
+        url = f"{self.base_url}/v1/rooms/{room_id}/status"
+        payload = self._request("GET", url)
+        return json.loads(payload.decode("utf-8"))
+
+    def wait_until_consumed(self, room_id, timeout=600, poll_seconds=0.5):
+        deadline = time.time() + timeout
+        saw_ready = False
+        while time.time() < deadline:
+            status = self.room_status(room_id)
+            if status.get("ready"):
+                saw_ready = True
+            if saw_ready and not status.get("ready"):
+                return
+            time.sleep(poll_seconds)
+        raise TimeoutError(
+            f"Timed out waiting for receiver to finish downloading {relay_code(room_id)}."
+        )
+
     def _request(self, method, url, data=None, headers=None):
         req = urlrequest.Request(url, data=data, method=method, headers=headers or {})
         try:
@@ -265,7 +284,7 @@ class RelayHandler(BaseHTTPRequestHandler):
 
 def start_relay_server(host="0.0.0.0", port=8765):
     server = HTTPServer((host, port), RelayHandler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True, name="edr-relay")
     thread.start()
     return server, f"http://{host if host != '0.0.0.0' else '127.0.0.1'}:{port}"
 
@@ -277,16 +296,20 @@ def _is_local_relay_url(base_url):
     return parsed.hostname in {"127.0.0.1", "localhost", "::1"}
 
 
+def _relay_health_ok(base):
+    try:
+        RelayClient(base)._request("GET", f"{base.rstrip('/')}/v1/health")
+        return True
+    except RuntimeError:
+        return False
+
+
 def ensure_relay_available(base_url=None):
     """Ping relay; auto-start embedded server for default localhost URL."""
     global _EMBEDDED_RELAY_SERVER
     base = (base_url or relay_base_url()).rstrip("/")
-    client = RelayClient(base)
-    try:
-        client._request("GET", f"{base}/v1/health")
+    if _relay_health_ok(base):
         return base
-    except RuntimeError:
-        pass
 
     if not _is_local_relay_url(base):
         raise RuntimeError(
@@ -300,8 +323,18 @@ def ensure_relay_available(base_url=None):
     port = parsed.port or 8765
     if _EMBEDDED_RELAY_SERVER is None:
         _EMBEDDED_RELAY_SERVER, started = start_relay_server(port=port)
-        return started.rstrip("/")
-    return base
+        base = started.rstrip("/")
+
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        if _relay_health_ok(base):
+            return base
+        time.sleep(0.2)
+
+    raise RuntimeError(
+        f"Cannot reach relay at {base}. "
+        f"Start one with: edr relay start  (or set EDR_RELAY_URL)"
+    )
 
 
 def register_waiting_room(room_id, base_url=None):
@@ -324,3 +357,7 @@ def download_payload(room_id, on_progress=None, base_url=None):
     client = RelayClient(base_url)
     client.wait_until_ready(room_id)
     return client.download(room_id, on_progress=on_progress)
+
+
+def wait_until_consumed(room_id, timeout=600, base_url=None):
+    RelayClient(base_url).wait_until_consumed(room_id, timeout=timeout)

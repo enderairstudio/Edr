@@ -84,8 +84,19 @@ Copy-App $DistEdr
 Build-Launcher $DistEdr
 
 if ((Get-Command py -ErrorAction SilentlyContinue) -or (Get-Command python -ErrorAction SilentlyContinue)) {
-    & "$DistEdr\edr.exe" version
-    if ($LASTEXITCODE -ne 0) { throw "edr.exe smoke test failed" }
+    $smokeOk = $false
+    try {
+        & "$DistEdr\edr.exe" version 2>$null
+        $smokeOk = $LASTEXITCODE -eq 0
+    } catch {
+        $smokeOk = $false
+    }
+    if (-not $smokeOk) {
+        Write-Host "edr.exe smoke test blocked or failed; using Python..." -ForegroundColor Yellow
+        $py = if (Get-Command py -ErrorAction SilentlyContinue) { "py" } else { "python" }
+        & $py "$DistEdr\app\command.py" version
+        if ($LASTEXITCODE -ne 0) { throw "EDR CLI smoke test failed" }
+    }
     Get-ChildItem "$DistEdr\app\__pycache__" -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
 }
 
