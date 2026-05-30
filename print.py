@@ -1,7 +1,7 @@
 import sys
 import time
 
-VERSION = "0.5.9"
+VERSION = "0.5.10"
 
 _active_stage = None
 _work_scale = 1.0

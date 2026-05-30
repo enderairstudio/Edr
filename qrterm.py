@@ -23,6 +23,12 @@ def _load_qrcode_module():
     return None
 
 
+def _print_matrix_ascii(matrix):
+    """CP437-safe QR: only # and spaces (works on all Windows consoles)."""
+    for row in matrix:
+        print("".join("##" if cell else "  " for cell in row))
+
+
 def print_qr(text, quiet=False):
     """Render a scannable QR in the terminal, or warn if the library is missing."""
     if not text:
@@ -34,11 +40,16 @@ def print_qr(text, quiet=False):
             print("QR: pip install qrcode  (optional; pull command is printed above)")
         return False
 
-    qr = qrcode.QRCode(border=1, box_size=1)
-    qr.add_data(text)
-    qr.make(fit=True)
-    qr.print_ascii(invert=True)
-    return True
+    try:
+        qr = qrcode.QRCode(border=1, box_size=1)
+        qr.add_data(text)
+        qr.make(fit=True)
+        _print_matrix_ascii(qr.get_matrix())
+        return True
+    except Exception as err:
+        if not quiet:
+            print(f"QR: could not render ({err})")
+        return False
 
 
 def pull_command_text(remote, port=None):

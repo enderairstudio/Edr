@@ -147,7 +147,10 @@ def bundle_to_file(output_path="project_payload.zip", root_dir=".", include_cli=
 def _print_pull_qr(remote, port=None):
     text = qr.pull_command_text(remote, port=port)
     p.info(f"Scan to pull: {text}")
-    qr.print_qr(text)
+    try:
+        qr.print_qr(text)
+    except Exception as err:
+        p.warn(f"Could not print QR code: {err}")
 
 
 def start_server(

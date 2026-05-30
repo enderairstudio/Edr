@@ -49,6 +49,8 @@ internal static class EdrLauncher
             WorkingDirectory = workDir,
             UseShellExecute = false,
         };
+        start.Environment["PYTHONIOENCODING"] = "utf-8";
+        start.Environment["PYTHONUTF8"] = "1";
 
         using (Process process = Process.Start(start))
         {
