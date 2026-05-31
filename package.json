@@ -1,0 +1,31 @@
+﻿{
+    "name":  "@enderair/edr",
+    "version":  "0.5.13",
+    "description":  "EDR Project Sharer CLI",
+    "license":  "MIT",
+    "author":  "Ender Air Studio",
+    "bin":  {
+                "edr":  "bin/edr.js"
+            },
+    "files":  [
+                  "bin/",
+                  "command.py",
+                  "handler.py",
+                  "share.py",
+                  "error.py",
+                  "print.py",
+                  "relay.py",
+                  "guard.py",
+                  "watch.py",
+                  "qrterm.py",
+                  "doctor_checks.py",
+                  "README.md",
+                  "LICENSE"
+              ],
+    "engines":  {
+                    "node":  "\u003e=16"
+                },
+    "publishConfig":  {
+                          "access":  "public"
+                      }
+}

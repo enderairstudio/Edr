@@ -1,8 +1,12 @@
 import argparse
 import json
+import os
 from pathlib import Path
 import secrets
+import shutil
+import subprocess
 import sys
+import time
 
 import error as e
 import guard as g
@@ -150,6 +154,10 @@ def build_parser():
 
     doctor_cmd = subparsers.add_parser("doctor", help="show CLI debug paths", allow_abbrev=False)
     doctor_cmd.set_defaults(func=cmd_doctor)
+
+    uninstall_cmd = subparsers.add_parser("uninstall", help="remove EDR from this user account", allow_abbrev=False)
+    uninstall_cmd.add_argument("-v", "--full", action="store_true", help="fully remove EDR files, state, and PATH entries")
+    uninstall_cmd.set_defaults(func=cmd_uninstall)
 
     relay_cmd = subparsers.add_parser("relay", help="relay server for non-network sharing", allow_abbrev=False)
     relay_sub = relay_cmd.add_subparsers(dest="relay_action", parser_class=CommandParser)
@@ -518,6 +526,69 @@ def cmd_doctor(args):
     return 0
 
 
+def cmd_uninstall(args):
+    targets = uninstall_targets()
+    p.section("EDR uninstall")
+
+    if not args.full:
+        p.info("Dry run only. Run `edr uninstall -v` to fully remove EDR for this user.")
+        for target in targets:
+            p.key_value(target["kind"], target["path"])
+        p.key_value("PATH cleanup", "yes")
+        p.key_value("npm package", "@enderair/edr if installed globally")
+        return 0
+
+    removed = 0
+    failed = 0
+    removed_messages = []
+    failed_messages = []
+    progress_label = "uninstalling EDR from system"
+    uninstall_progress(progress_label, 0, 0)
+
+    for target in targets:
+        path = target["path"]
+        if not path.exists() and not path.is_symlink():
+            continue
+        try:
+            result = remove_path(path)
+            if result == "scheduled":
+                removed_messages.append(f"Scheduled {target['kind']} for deletion after EDR exits: {path}")
+            else:
+                removed_messages.append(f"Removed {target['kind']}: {path}")
+            removed += 1
+        except OSError as err:
+            failed_messages.append(f"Could not remove {path}: {err}")
+            failed += 1
+
+    uninstall_progress(progress_label, 1, 60)
+
+    if remove_edr_from_path():
+        removed_messages.append("Removed EDR install entries from user PATH")
+        removed += 1
+
+    uninstall_progress(progress_label, 61, 80)
+
+    npm_removed = uninstall_npm_package()
+    if npm_removed:
+        removed_messages.append("Removed global npm package @enderair/edr")
+        removed += 1
+
+    uninstall_progress(progress_label, 81, 100, done=True)
+
+    p.section("Summary")
+    for message in removed_messages:
+        p.success(message)
+    for message in failed_messages:
+        p.warn(message)
+    if failed:
+        p.warn(f"Removed {removed} item(s), {failed} item(s) need manual cleanup.")
+        print("GoodBye :(")
+        return 1
+    p.success(f"EDR uninstall complete. Removed {removed} item(s).")
+    print("GoodBye :(")
+    return 0
+
+
 def cmd_relay_start(args):
     _, url = r.start_relay_server(host=args.host, port=args.port)
     p.success(f"Relay listening at {url}")
@@ -541,6 +612,179 @@ def receive_allows_self(args):
         if item.get("allow_self") and port == item.get("port", s.DEFAULT_PORT):
             return True
     return False
+
+
+def uninstall_targets():
+    home = Path.home()
+    targets = [
+        {"kind": "state", "path": home / STATE_DIR},
+    ]
+
+    if sys.platform == "win32":
+        local = Path(os.environ.get("LOCALAPPDATA", home))
+        roaming = Path(os.environ.get("APPDATA", home))
+        targets.extend(
+            [
+                {"kind": "install", "path": local / "EDR"},
+                {"kind": "install", "path": local / "EDR" / "EDR-Setup"},
+                {"kind": "install", "path": roaming / "EDR"},
+            ]
+        )
+    elif sys.platform == "darwin":
+        targets.extend(
+            [
+                {"kind": "install", "path": home / "Applications" / "EDR"},
+                {"kind": "install", "path": home / ".local" / "share" / "edr"},
+            ]
+        )
+    else:
+        targets.extend(
+            [
+                {"kind": "install", "path": home / ".local" / "share" / "edr"},
+                {"kind": "launcher", "path": home / ".local" / "bin" / "edr"},
+                {"kind": "system launcher", "path": Path("/usr/bin/edr")},
+                {"kind": "system install", "path": Path("/usr/share/edr")},
+            ]
+        )
+
+    legacy_state = Path.cwd() / STATE_DIR
+    app_dir = Path(__file__).resolve().parent
+    if Path.cwd().resolve() != app_dir and legacy_state != home / STATE_DIR and (legacy_state / SHARERS_FILE).exists():
+        targets.append({"kind": "legacy state", "path": legacy_state})
+
+    return targets
+
+
+def uninstall_progress(label, start, end, done=False):
+    step = 1 if end >= start else -1
+    for percent in range(start, end + step, step):
+        sys.stdout.write(f"\r{label}... {percent}")
+        sys.stdout.flush()
+        if percent != end:
+            time.sleep(0.04)
+    if done:
+        sys.stdout.write(f"\r{label}... done   \n")
+        sys.stdout.flush()
+
+
+def remove_path(path):
+    try:
+        if path.is_symlink() or path.is_file():
+            path.unlink()
+        elif path.is_dir():
+            shutil.rmtree(path)
+        return "removed"
+    except PermissionError:
+        if sys.platform == "win32" and schedule_windows_delete(path):
+            return "scheduled"
+        raise
+
+
+def schedule_windows_delete(path):
+    if not path.exists() and not path.is_symlink():
+        return False
+
+    path_text = str(path)
+    safe_path = path_text.replace('"', '""')
+    if path.is_dir() and not path.is_symlink():
+        delete_command = f'timeout /t 2 /nobreak >nul & rmdir /s /q "{safe_path}"'
+    else:
+        delete_command = f'timeout /t 2 /nobreak >nul & del /f /q "{safe_path}"'
+
+    try:
+        subprocess.Popen(
+            ["cmd.exe", "/c", delete_command],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=(
+                getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                | getattr(subprocess, "DETACHED_PROCESS", 0)
+                | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            ),
+            close_fds=True,
+        )
+        return True
+    except OSError:
+        return False
+
+
+def remove_edr_from_path():
+    if sys.platform == "win32":
+        return remove_edr_from_windows_user_path()
+    return remove_edr_from_shell_profiles()
+
+
+def remove_edr_from_windows_user_path():
+    try:
+        import winreg
+    except ImportError:
+        return False
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_READ | winreg.KEY_WRITE) as key:
+            try:
+                current, value_type = winreg.QueryValueEx(key, "Path")
+            except FileNotFoundError:
+                return False
+            parts = [part for part in current.split(";") if part and not is_edr_path_entry(part)]
+            updated = ";".join(parts).strip(";")
+            if updated == current:
+                return False
+            winreg.SetValueEx(key, "Path", 0, value_type, updated)
+            return True
+    except OSError as err:
+        p.warn(f"Could not update user PATH: {err}")
+        return False
+
+
+def remove_edr_from_shell_profiles():
+    install_dirs = {
+        str(Path.home() / "Applications" / "EDR"),
+        str(Path.home() / ".local" / "share" / "edr"),
+    }
+    changed = False
+    for profile in (Path.home() / ".profile", Path.home() / ".zprofile"):
+        if not profile.exists():
+            continue
+        try:
+            lines = profile.read_text(encoding="utf-8", errors="ignore").splitlines()
+            kept = [line for line in lines if not any(folder in line and "PATH" in line for folder in install_dirs)]
+            if kept != lines:
+                profile.write_text("\n".join(kept) + ("\n" if kept else ""), encoding="utf-8")
+                changed = True
+        except OSError as err:
+            p.warn(f"Could not update {profile}: {err}")
+    return changed
+
+
+def is_edr_path_entry(entry):
+    if not entry:
+        return False
+    upper = entry.upper().replace("/", "\\")
+    return (
+        "\\EDR\\" in upper
+        or upper.endswith("\\EDR")
+        or "\\EDR-SETUP\\" in upper
+        or "\\NODE_MODULES\\@ENDERAIR\\EDR" in upper
+    )
+
+
+def uninstall_npm_package():
+    if not shutil.which("npm"):
+        return False
+    try:
+        result = subprocess.run(
+            ["npm", "uninstall", "-g", "@enderair/edr", "--loglevel=error"],
+            capture_output=True,
+            text=True,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except OSError:
+        return False
+    output = f"{result.stdout}\n{result.stderr}".lower()
+    return result.returncode == 0 and "up to date" not in output
 
 
 def start_profile(item, port=None, forever=False, dry_run=False, skip_guard=False, watch=False, show_qr=True):

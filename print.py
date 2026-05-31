@@ -1,7 +1,7 @@
 import sys
 import time
 
-VERSION = "0.5.11"
+VERSION = "0.5.13"
 
 _active_stage = None
 _work_scale = 1.0
@@ -293,6 +293,8 @@ def help_menu():
     _help_cmd("edr scan [folder] --report <file>", "Export Guard report (.json + .txt)")
     _help_cmd("edr ip", "Show this PC's LAN IP")
     _help_cmd("edr doctor", "Health check: Python, ports, relay, PATH")
+    _help_cmd("edr uninstall", "Preview files, PATH entries, and npm package removal")
+    _help_cmd("edr uninstall -v", "Fully remove EDR for this user, then say goodbye")
     _help_cmd("edr version  |  edr v", "Show version")
     _help_cmd("edr help", "Show this menu")
 
@@ -321,6 +323,7 @@ def help_menu():
     _help_cmd("edr start devbox", "Share and show pull QR")
     _help_cmd("edr scan . --report guard-report", "Write guard-report.json/.txt")
     _help_cmd("edr pull 192.168.1.20 --to .\\copy --force", "LAN pull into folder")
+    _help_cmd("edr uninstall -v", "Remove EDR state, installs, PATH entries, and npm package")
 
     _help_rule("-")
     print("  Aliases: v=version  ls=list  run=start  serve=share  send=push")

@@ -9,7 +9,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 APP_NAME = "EDR Project Sharer"
-APP_VERSION = "0.5.8"
+APP_VERSION = "0.5.13"
 SYSTEM = platform.system()
 
 COLORS = {
@@ -110,9 +110,38 @@ def remove_npm_legacy_edr():
         pass
 
 
-def remove_legacy_install_dir(target_dir: Path):
-    if target_dir.exists():
-        shutil.rmtree(target_dir, ignore_errors=True)
+def iter_old_install_dirs(target_dir: Path):
+    home = Path.home()
+    candidates = {target_dir}
+    if SYSTEM == "Windows":
+        local = Path(os.environ.get("LOCALAPPDATA", home))
+        roaming = Path(os.environ.get("APPDATA", home))
+        candidates.update({
+            local / "EDR",
+            local / "EDR" / "EDR-Setup",
+            roaming / "EDR",
+        })
+    elif SYSTEM == "Darwin":
+        candidates.update({
+            home / "Applications" / "EDR",
+            home / ".local" / "share" / "edr",
+        })
+    else:
+        candidates.update({
+            home / ".local" / "share" / "edr",
+        })
+
+    for candidate in sorted(candidates, key=lambda item: str(item).lower()):
+        yield candidate
+
+
+def remove_old_edr_system(target_dir: Path):
+    removed = 0
+    for old_dir in iter_old_install_dirs(target_dir):
+        if old_dir.exists():
+            shutil.rmtree(old_dir, ignore_errors=True)
+            removed += 1
+    return removed
 
 
 def add_to_user_path(folder):
@@ -402,16 +431,18 @@ class SetupApp(tk.Tk):
 
         try:
             prepare_started = time.perf_counter()
-            self.set_progress(2, "Removing old npm EDR…")
+            self.set_progress(2, "Checking for old EDR installs...")
             remove_npm_legacy_edr()
-            remove_legacy_install_dir(target_dir)
+            self.set_progress(5, "Removing old EDR to make space for the new one...")
+            removed_old = remove_old_edr_system(target_dir)
             target_dir.mkdir(parents=True, exist_ok=True)
+            cleanup_message = "Old EDR removed. Preparing installation..." if removed_old else "No old EDR install found. Preparing installation..."
             self._wait_stage_minimum(
                 prepare_started,
                 MIN_STAGE_SECONDS["prepare"],
-                2,
+                5,
                 10,
-                "Preparing installation…",
+                cleanup_message,
             )
 
             plan = list(iter_copy_plan(source))
