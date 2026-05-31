@@ -1,0 +1,47 @@
+0 verbose cli C:\Program Files\nodejs\node.exe C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js
+1 info using npm@11.11.0
+2 info using node@v24.14.1
+3 silly config load:file:C:\Program Files\nodejs\node_modules\npm\npmrc
+4 silly config load:file:C:\Users\Liam\Desktop\project-sharer\.npmrc
+5 silly config load:file:C:\Users\Liam\.npmrc
+6 silly config load:file:C:\Users\Liam\AppData\Roaming\npm\etc\npmrc
+7 verbose title npm pack
+8 verbose argv "pack" "--dry-run" "--cache" ".npm-cache"
+9 verbose logfile logs-max:10 dir:C:\Users\Liam\Desktop\project-sharer\.npm-cache\_logs\2026-05-31T15_22_03_646Z-
+10 verbose logfile C:\Users\Liam\Desktop\project-sharer\.npm-cache\_logs\2026-05-31T15_22_03_646Z-debug-0.log
+11 silly logfile done cleaning log files
+12 http fetch GET https://registry.npmjs.org/npm attempt 1 failed with ECONNREFUSED
+13 silly packumentCache heap:2348810240 maxSize:587202560 maxEntrySize:293601280
+14 notice
+15 notice package: @enderair/edr@0.5.14
+16 notice Tarball Contents
+17 notice 1.1kB LICENSE
+17 notice 3.4kB README.md
+17 notice 1.0kB bin/edr.js
+17 notice 190B command.py
+17 notice 5.2kB doctor_checks.py
+17 notice 246B error.py
+17 notice 9.6kB guard.py
+17 notice 39.7kB handler.py
+17 notice 866B package.json
+17 notice 10.3kB print.py
+17 notice 1.7kB qrterm.py
+17 notice 12.9kB relay.py
+17 notice 18.1kB share.py
+17 notice 3.0kB watch.py
+18 notice Tarball Details
+19 notice name: @enderair/edr
+20 notice version: 0.5.14
+21 notice filename: enderair-edr-0.5.14.tgz
+22 notice package size: 28.7 kB
+23 notice unpacked size: 107.3 kB
+24 notice shasum: 6dfba3712d87cee0fc2eedb2e6e90e77da41270a
+25 notice integrity: sha512-74nO9InOxr2I2[...]EH9p+2sYdzTiw==
+26 notice total files: 14
+27 notice
+28 verbose cwd C:\Users\Liam\Desktop\project-sharer
+29 verbose os Windows_NT 10.0.26200
+30 verbose node v24.14.1
+31 verbose npm  v11.11.0
+32 verbose exit 0
+33 info ok

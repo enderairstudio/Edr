@@ -570,7 +570,7 @@ def cmd_uninstall(args):
 
     npm_removed = uninstall_npm_package()
     if npm_removed:
-        removed_messages.append("Removed global npm package @enderair/edr")
+        removed_messages.append("Removed global npm package @enderair/edr and its shims")
         removed += 1
 
     uninstall_progress(progress_label, 81, 100, done=True)
@@ -771,20 +771,76 @@ def is_edr_path_entry(entry):
 
 
 def uninstall_npm_package():
-    if not shutil.which("npm"):
+    removed_any = False
+
+    if shutil.which("npm"):
+        try:
+            result = subprocess.run(
+                ["npm", "uninstall", "-g", "@enderair/edr", "--loglevel=error"],
+                capture_output=True,
+                text=True,
+                check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            removed_any = result.returncode == 0
+        except OSError:
+            pass
+
+    removed_any = remove_npm_global_install() or removed_any
+    return removed_any
+
+
+def remove_npm_global_install():
+    prefix = get_npm_global_prefix()
+    if not prefix:
         return False
+
+    removed = False
+    package_dir = prefix / "node_modules" / "@enderair" / "edr"
+    shim_paths = [prefix / "edr", prefix / "edr.cmd", prefix / "edr.ps1"]
+    if sys.platform != "win32":
+        shim_paths = [prefix / "bin" / "edr"]
+
+    if package_dir.exists() or package_dir.is_symlink():
+        try:
+            remove_path(package_dir)
+            removed = True
+        except OSError:
+            pass
+
+    for shim in shim_paths:
+        if shim.exists() or shim.is_symlink():
+            try:
+                remove_path(shim)
+                removed = True
+            except OSError:
+                pass
+
+    return removed
+
+
+def get_npm_global_prefix():
+    if not shutil.which("npm"):
+        return None
     try:
         result = subprocess.run(
-            ["npm", "uninstall", "-g", "@enderair/edr", "--loglevel=error"],
+            ["npm", "config", "get", "prefix"],
             capture_output=True,
             text=True,
             check=False,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except OSError:
-        return False
-    output = f"{result.stdout}\n{result.stderr}".lower()
-    return result.returncode == 0 and "up to date" not in output
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    value = (result.stdout or "").strip().splitlines()
+    if not value:
+        return None
+    prefix = value[-1].strip()
+    return Path(prefix) if prefix else None
 
 
 def start_profile(item, port=None, forever=False, dry_run=False, skip_guard=False, watch=False, show_qr=True):
