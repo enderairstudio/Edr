@@ -1,7 +1,11 @@
-build/
+build/cache/
+build/qr_vendor/
+build/qr_vendor_*/
 dist/
 __pycache__/
 *.pyc
+.npm-cache/
+rust-core/target/
 .edr/
 *.spec.bak
 build/EDR-Setup-Full.generated.iss
