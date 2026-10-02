@@ -8,6 +8,9 @@ EDR is a command-line project sharing tool. It lets you send a project folder fr
 - A reusable profile manager for folders you share often.
 - A LAN sender/receiver for same-network transfers.
 - A relay-code workflow for cross-network transfers when both machines use the same relay.
+- Streaming LAN transfers so large projects do not need to be loaded into memory before sending.
+- A `--fast` mode that skips ZIP compression when raw throughput matters more than smallest payload size.
+- Cancellation cleanup: if a pull is interrupted, EDR removes partial files on the receiving machine.
 - A safety layer that scans projects with EDR Guard before sharing.
 - A packaging target for Windows, macOS, Linux, and npm global installs.
 
@@ -53,10 +56,13 @@ The Windows installer checks for old EDR installs and removes them before copyin
 Relay mode:
 
 ```bash
-edr create sharer . --non-network --idnew
+edr relay start --host 0.0.0.0 --port 8765
+edr create sharer . --non-network --idnew --relay-url http://<relay-ip>:8765
 edr start <id>
-edr pull Edrnko_<id>
+edr pull Edrnko_<id> --relay-url http://<relay-ip>:8765
 ```
+
+Both machines must use the same relay URL. For local testing, EDR can auto-start the default local relay at `http://127.0.0.1:8765`, but cross-machine relay mode needs a reachable relay host.
 
 LAN mode:
 
@@ -65,6 +71,16 @@ edr create sharer . --id myproject
 edr start myproject
 edr pull <sender-ip>
 ```
+
+Maximum-speed LAN mode:
+
+```bash
+edr create sharer . --id myproject --fast
+edr start myproject
+edr pull <sender-ip>
+```
+
+`--fast` stores files in the transfer ZIP without compression. This usually improves speed for large folders, already-compressed files, fast LANs, and slower CPUs. Leave it off when the network is the bottleneck and smaller payloads matter more.
 
 Useful commands:
 
@@ -75,6 +91,14 @@ edr status myproject
 edr doctor
 edr scan . --report guard-report
 ```
+
+## Transfer behavior
+
+- LAN sends stream directly to the receiver instead of building the entire payload in RAM.
+- Relay mode uploads by chunks and deletes stale relay rooms when the sender cancels or times out.
+- The relay server handles concurrent status, upload, and download requests.
+- Pulls stage data before extraction. If the receiver cancels or extraction fails, EDR removes newly-created partial files on the receiver and never deletes files from the sharer's folder.
+- Use `--relay-url` on `create`, `edit`, `start`, `push`, `share`, or `pull` when the relay is not the default localhost URL.
 
 ## Uninstall
 

@@ -6,3 +6,4 @@ __pycache__/
 *.spec.bak
 build/EDR-Setup-Full.generated.iss
 Website
+.npm-cache/

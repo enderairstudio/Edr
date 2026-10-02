@@ -216,8 +216,8 @@ def prompt_name_countdown(seconds=3):
     return result[0]
 
 
-_HELP_WIDTH = 70
-_HELP_CMD_COL = 38
+_HELP_WIDTH = 84
+_HELP_CMD_COL = 52
 
 
 def _help_rule(char="="):
@@ -239,6 +239,10 @@ def _help_section(title):
 
 
 def _help_cmd(command, description):
+    if len(command) >= _HELP_CMD_COL:
+        print(f"    {command}")
+        print(f"    {'':<{_HELP_CMD_COL}}{description}")
+        return
     print(f"    {command:<{_HELP_CMD_COL}}{description}")
 
 
@@ -303,6 +307,8 @@ def help_menu():
     _help_cmd("--auto", "Keep serving after each pull")
     _help_cmd("--non-network", "Relay mode (Edrnko_ code)")
     _help_cmd("--idnew", "New random relay id")
+    _help_cmd("--relay-url <url>", "Relay URL shared by sender and receiver")
+    _help_cmd("--fast", "Skip ZIP compression for maximum throughput")
     _help_cmd("--name <name>", "Display name (3s prompt if omitted)")
     _help_cmd("--port <port>", "LAN TCP port (default 5005)")
     _help_cmd("--allow-self", "Allow pull on this same PC")
@@ -311,15 +317,17 @@ def help_menu():
     _help_cmd("--to <dir>  --force", "Pull destination / overwrite")
 
     _help_section("Relay vs LAN")
-    _help_note("Relay (any network): same EDR_RELAY_URL on every PC")
-    _help_cmd("edr create sharer <folder> --non-network --idnew", "Create relay profile")
-    _help_cmd("edr pull Edrnko_<id>", "Receive on another machine")
+    _help_note("Relay (any network): use the same relay URL on every PC")
+    _help_cmd("edr relay start --host 0.0.0.0 --port 8765", "Start a reachable relay")
+    _help_cmd("edr create sharer <folder> --non-network --idnew --relay-url http://<relay-ip>:8765", "Create relay profile")
+    _help_cmd("edr pull Edrnko_<id> --relay-url http://<relay-ip>:8765", "Receive on another machine")
     _help_blank()
     _help_note("LAN (same Wi-Fi): use IP from edr ip")
     _help_cmd("edr pull <ip> --port 5005", "Receive on another device")
 
     _help_section("Examples")
     _help_cmd("edr create sharer . --id devbox --watch", "Profile with auto-share")
+    _help_cmd("edr create sharer . --id devbox --fast", "Profile optimized for LAN speed")
     _help_cmd("edr start devbox", "Share and show pull QR")
     _help_cmd("edr scan . --report guard-report", "Write guard-report.json/.txt")
     _help_cmd("edr pull 192.168.1.20 --to .\\copy --force", "LAN pull into folder")
