@@ -183,7 +183,6 @@ def add_share_options(parser):
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--non-network", action="store_true")
     parser.add_argument("--relay-url", help="relay server URL for --non-network")
-    parser.add_argument("--idnew", action="store_true")
     parser.add_argument("--skip-guard", action="store_true", help="skip EDR Guard scan")
     parser.add_argument("--watch", action="store_true", help="detect folder changes while waiting")
     parser.add_argument("--no-qr", action="store_true", help="do not print a pull QR code")
@@ -234,9 +233,10 @@ def cmd_create(args):
             relay_id = args.share_id
             if relay_id.startswith(r.RELAY_PREFIX):
                 relay_id = relay_id[len(r.RELAY_PREFIX):]
-        elif args.idnew or not args.share_id:
-            relay_id = r.generate_relay_id()
         else:
+            # --idnew has no effect here: with no --id given there is no
+            # existing code to reuse in the first place, so a fresh one is
+            # always generated.
             relay_id = r.generate_relay_id()
         share_id = relay_id
     else:
@@ -392,7 +392,9 @@ def cmd_share(args):
     folder = resolve_folder(args.path)
     relay_id = None
     if args.non_network:
-        relay_id = r.generate_relay_id() if args.idnew else r.generate_relay_id()
+        # Ephemeral shares never have a prior code to reuse, so this is
+        # always a freshly generated id.
+        relay_id = r.generate_relay_id()
         p.info(f"Ephemeral share code: {r.relay_code(relay_id)}")
     s.start_server(
         root_dir=folder,

@@ -23,21 +23,19 @@ SUSPICIOUS_DOUBLE_EXT = re.compile(
     re.IGNORECASE,
 )
 
-# Content signatures (hex or text) seen in malware / droppers.
-BINARY_SIGNATURES = [
-    b"MZ",  # PE — checked only when extension is not a known binary allowlist
-]
-
-# Text patterns in scripts / payloads (case-insensitive).
+# Text patterns in scripts / payloads (case-insensitive). These are real
+# regexes (note \s+, (enc|e), escaped dots, etc.) — they must be run through
+# re.search(..., re.IGNORECASE), NOT a plain "in" substring check, or most of
+# them can never match real content (a literal backslash-s is not whitespace).
 TEXT_PATTERNS = [
-    rb"powershell\s+-(enc|e)\s+",
+    rb"powershell(\.exe)?\s+-+(enc|e)\w*\s+",
     rb"frombase64string",
     rb"iex\s*\(",
     rb"invoke-expression",
     rb"downloadstring\s*\(",
     rb"downloadfile\s*\(",
     rb"wscript\.shell",
-    rb"creatobject\s*\(\s*[\"']shell",
+    rb"createobject\s*\(\s*[\"']shell",
     rb"autoopen\s*\(",
     rb"cmd\.exe\s+/c",
     rb"regsvr32\s+/",
@@ -51,6 +49,8 @@ TEXT_PATTERNS = [
     rb"write-processmemory",
     rb"EICAR-STANDARD-ANTIVIRUS-TEST-FILE",
 ]
+
+_COMPILED_TEXT_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in TEXT_PATTERNS]
 
 # Max bytes to scan per file for content (keeps large projects fast).
 MAX_SCAN_BYTES = 512 * 1024
@@ -104,8 +104,8 @@ def _scan_content(name, data: bytes, suffix: str):
         if suffix not in BLOCKED_EXTENSIONS:
             raise ThreatFound(name, "executable content in non-executable file")
 
-    for pattern in TEXT_PATTERNS:
-        if pattern.lower() in data.lower():
+    for compiled in _COMPILED_TEXT_PATTERNS:
+        if compiled.search(data):
             raise ThreatFound(name, "malicious pattern detected")
 
     # High entropy + MZ in tiny scripts
