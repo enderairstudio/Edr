@@ -8,7 +8,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$Root = $PSScriptRoot
+$Root = Split-Path -Parent $PSScriptRoot
 $DistEdr = Join-Path $Root "dist\edr"
 $InstallerDir = Join-Path $Root "dist\EDR-Setup"
 $SetupExe = Join-Path $Root "dist\EDR-Setup.exe"
@@ -203,9 +203,8 @@ function Publish-NpmPackage {
 
 Push-Location $Root
 
-Write-Host "Removing build/ and dist/..." -ForegroundColor Cyan
+Write-Host "Cleaning dist/ output..." -ForegroundColor Cyan
 Remove-Tree @(
-    (Join-Path $Root "build"),
     (Join-Path $Root "dist")
 )
 New-Item -ItemType Directory -Force -Path (Join-Path $Root "dist") | Out-Null
@@ -236,7 +235,15 @@ if ((Get-Command py -ErrorAction SilentlyContinue) -or (Get-Command python -Erro
 Write-Host "Building EDR-Setup.exe (Inno Setup)..." -ForegroundColor Cyan
 $Iscc = Get-Iscc
 if (-not $Iscc) {
-    throw "Inno Setup 6 required. Install: winget install JRSoftware.InnoSetup"
+    $Winget = Get-Command winget -ErrorAction SilentlyContinue
+    if ($Winget) {
+        Write-Host "Installing Inno Setup 6 for the Windows installer..." -ForegroundColor Cyan
+        & $Winget.Source install --id JRSoftware.InnoSetup --exact --source winget --silent --accept-package-agreements --accept-source-agreements
+        if ($LASTEXITCODE -eq 0) { $Iscc = Get-Iscc }
+    }
+    if (-not $Iscc) {
+        throw "Inno Setup 6 is required. Install it with: winget install JRSoftware.InnoSetup"
+    }
 }
 & $Iscc "$Root\installer\EDR-Setup.iss"
 if ($LASTEXITCODE -ne 0) { throw "Inno compile failed" }

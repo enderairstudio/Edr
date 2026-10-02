@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Build macOS (.dmg) and Linux (.deb) release packages.
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PLATFORM="${1:-}"
 DIST="$ROOT/dist"
 PAYLOAD="$DIST/edr-unix"
@@ -28,7 +29,7 @@ fix_crlf() {
   fi
   sed -i 's/\r$//' "$f" 2>/dev/null || sed -i '' 's/\r$//' "$f"
 }
-fix_crlf "$ROOT/build-unix.sh"
+fix_crlf "$SCRIPT_DIR/build-unix.sh"
 fix_crlf "$ROOT/scripts/edr"
 fix_crlf "$ROOT/scripts/install-macos.sh"
 fix_crlf "$ROOT/scripts/install-linux.sh"

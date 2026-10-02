@@ -61,10 +61,12 @@ def build_parser():
     create_cmd.add_argument("--auto", action="store_true", help="default to long-running auto mode")
     create_cmd.add_argument("--include-cli", action="store_true")
     create_cmd.add_argument("--non-network", action="store_true", help="share via relay (any network)")
+    create_cmd.add_argument("--relay-url", help="relay server URL for --non-network")
     create_cmd.add_argument("--idnew", action="store_true", help="generate a new random relay id")
     create_cmd.add_argument("--allow-self", action="store_true", help="allow pulling from this same machine")
     create_cmd.add_argument("--skip-guard", action="store_true", help="skip EDR Guard scan when sharing")
     create_cmd.add_argument("--watch", action="store_true", help="detect folder changes while sharing (auto-share)")
+    create_cmd.add_argument("--fast", action="store_true", help="skip ZIP compression for maximum transfer speed")
     create_cmd.add_argument("--name", help="display name for this sharer")
     create_cmd.set_defaults(func=cmd_create)
 
@@ -100,6 +102,8 @@ def build_parser():
     start_cmd.add_argument("--skip-guard", action="store_true", help="skip EDR Guard scan for this session")
     start_cmd.add_argument("--watch", action="store_true", help="detect folder changes while waiting (auto-share)")
     start_cmd.add_argument("--no-qr", action="store_true", help="do not print a pull QR code")
+    start_cmd.add_argument("--relay-url", help="relay server URL for this run")
+    start_cmd.add_argument("--fast", action="store_true", help="skip ZIP compression for this run")
     start_cmd.set_defaults(func=cmd_start)
 
     share_cmd = subparsers.add_parser("share", aliases=["serve"], help="serve a folder without saving it", allow_abbrev=False)
@@ -112,6 +116,8 @@ def build_parser():
     push_cmd.add_argument("--port", type=valid_port)
     push_cmd.add_argument("--auto", action="store_true")
     push_cmd.add_argument("--dry-run", action="store_true")
+    push_cmd.add_argument("--relay-url", help="relay server URL for this run")
+    push_cmd.add_argument("--fast", action="store_true", help="skip ZIP compression for this run")
     push_cmd.set_defaults(func=cmd_push)
 
     pull_cmd = subparsers.add_parser("pull", help="receive from a remote sharer", allow_abbrev=False)
@@ -132,6 +138,7 @@ def build_parser():
     pack_cmd.add_argument("--include-cli", action="store_true")
     pack_cmd.add_argument("--force", action="store_true")
     pack_cmd.add_argument("--skip-guard", action="store_true", help="skip EDR Guard scan")
+    pack_cmd.add_argument("--fast", action="store_true", help="skip ZIP compression")
     pack_cmd.set_defaults(func=cmd_pack)
 
     scan_cmd = subparsers.add_parser("scan", help="run EDR Guard on a folder", allow_abbrev=False)
@@ -155,6 +162,9 @@ def build_parser():
     doctor_cmd = subparsers.add_parser("doctor", help="show CLI debug paths", allow_abbrev=False)
     doctor_cmd.set_defaults(func=cmd_doctor)
 
+    desktop_cmd = subparsers.add_parser("desktop", aliases=["gui"], help="open the EDR desktop app", allow_abbrev=False)
+    desktop_cmd.set_defaults(func=cmd_desktop)
+
     uninstall_cmd = subparsers.add_parser("uninstall", help="remove EDR from this user account", allow_abbrev=False)
     uninstall_cmd.add_argument("-v", "--full", action="store_true", help="fully remove EDR files, state, and PATH entries")
     uninstall_cmd.set_defaults(func=cmd_uninstall)
@@ -175,10 +185,12 @@ def add_share_options(parser):
     parser.add_argument("--auto", action="store_true", help="keep serving new pulls")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--non-network", action="store_true")
+    parser.add_argument("--relay-url", help="relay server URL for --non-network")
     parser.add_argument("--idnew", action="store_true")
     parser.add_argument("--skip-guard", action="store_true", help="skip EDR Guard scan")
     parser.add_argument("--watch", action="store_true", help="detect folder changes while waiting")
     parser.add_argument("--no-qr", action="store_true", help="do not print a pull QR code")
+    parser.add_argument("--fast", action="store_true", help="skip ZIP compression for maximum transfer speed")
 
 
 def add_edit_options(parser):
@@ -198,6 +210,9 @@ def add_edit_options(parser):
     parser.add_argument("--no-skip-guard", action="store_true", default=argparse.SUPPRESS)
     parser.add_argument("--watch", action="store_true", default=argparse.SUPPRESS)
     parser.add_argument("--no-watch", action="store_true", default=argparse.SUPPRESS)
+    parser.add_argument("--relay-url", default=argparse.SUPPRESS, help="relay server URL")
+    parser.add_argument("--fast", action="store_true", default=argparse.SUPPRESS)
+    parser.add_argument("--no-fast", action="store_true", default=argparse.SUPPRESS)
 
 
 def add_receive_options(parser):
@@ -206,6 +221,7 @@ def add_receive_options(parser):
     parser.add_argument("--to")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--allow-self", action="store_true", help="allow pulling from this same machine")
+    parser.add_argument("--relay-url", help="relay server URL")
 
 
 def cmd_create(args):
@@ -247,12 +263,15 @@ def cmd_create(args):
         "allow_self": args.allow_self,
         "skip_guard": args.skip_guard,
         "watch": args.watch,
+        "fast": args.fast,
     }
     if display_name:
         entry["name"] = display_name
     if non_network:
         entry["relay_id"] = relay_id
         entry["relay_code"] = r.relay_code(relay_id)
+        if args.relay_url:
+            entry["relay_url"] = args.relay_url.rstrip("/")
 
     store[share_id] = entry
     save_store(store)
@@ -265,7 +284,7 @@ def cmd_create(args):
     if non_network:
         p.key_value("Network", "relay (anywhere)")
         p.key_value("Share code", entry["relay_code"])
-        p.key_value("Relay", r.relay_base_url())
+        p.key_value("Relay", entry.get("relay_url") or r.relay_base_url())
         p.info(f"Start sharing (waits for pull): edr start {share_id}")
         p.info(f"Pull anywhere: edr pull {entry['relay_code']}")
     else:
@@ -357,6 +376,7 @@ def cmd_start(args):
     port = args.port or item["port"]
     skip_guard = args.skip_guard or item.get("skip_guard", False)
     watch = args.watch or item.get("watch", False)
+    fast = args.fast or item.get("fast", False)
     start_profile(
         item,
         port=port,
@@ -365,6 +385,8 @@ def cmd_start(args):
         skip_guard=skip_guard,
         watch=watch,
         show_qr=not args.no_qr,
+        relay_url=args.relay_url,
+        fast=fast,
     )
     return 0
 
@@ -384,9 +406,11 @@ def cmd_share(args):
         forever=args.auto,
         non_network=args.non_network,
         relay_id=relay_id,
+        relay_url=args.relay_url,
         skip_guard=args.skip_guard,
         watch=args.watch,
         show_qr=not args.no_qr,
+        fast=args.fast,
     )
     return 0
 
@@ -394,7 +418,15 @@ def cmd_share(args):
 def cmd_push(args):
     item = get_selected_sharer(args.share_id)
     port = args.port or item["port"]
-    start_profile(item, port=port, forever=args.auto, dry_run=args.dry_run, skip_guard=item.get("skip_guard", False))
+    start_profile(
+        item,
+        port=port,
+        forever=args.auto,
+        dry_run=args.dry_run,
+        skip_guard=item.get("skip_guard", False),
+        relay_url=args.relay_url,
+        fast=args.fast or item.get("fast", False),
+    )
     return 0
 
 
@@ -404,7 +436,12 @@ def cmd_receive(args):
 
     relay_id, _relay_code = r.parse_relay_remote(args.remote)
     if relay_id:
-        extracted, destination = s.receive_project(args.remote, target_dir=args.to, force=args.force)
+        extracted, destination = s.receive_project(
+            args.remote,
+            target_dir=args.to,
+            force=args.force,
+            relay_url=args.relay_url,
+        )
     else:
         if s.is_local_address(args.remote) and not receive_allows_self(args):
             raise e.CliError(
@@ -430,6 +467,7 @@ def cmd_pack(args):
         include_cli=args.include_cli,
         force=args.force,
         skip_guard=args.skip_guard,
+        fast=args.fast,
     )
     p.success(f"Packed {target} ({s.format_bytes(size)}).")
     return 0
@@ -475,6 +513,7 @@ def cmd_status(args):
         if item.get("non_network"):
             p.key_value("Network", "relay")
             p.key_value("Share code", item.get("relay_code", ""))
+            p.key_value("Relay", item.get("relay_url") or r.relay_base_url())
     else:
         folder = resolve_folder(args.path or ".")
 
@@ -483,6 +522,7 @@ def cmd_status(args):
     p.key_value("Files", summary["files"])
     p.key_value("Size", s.format_bytes(summary["bytes"]))
     p.key_value("Include CLI", "yes" if summary["include_cli"] else "no")
+    p.key_value("Fast mode", "yes" if (args.share_id and item.get("fast")) else "no")
     p.key_value("Ignored dirs", summary["ignored_dirs"])
     return 0
 
@@ -591,8 +631,16 @@ def cmd_uninstall(args):
 
 def cmd_relay_start(args):
     _, url = r.start_relay_server(host=args.host, port=args.port)
-    p.success(f"Relay listening at {url}")
-    p.info("Set EDR_RELAY_URL on all devices that should use this relay.")
+    if args.host in {"0.0.0.0", "::"}:
+        lan_url = f"http://{s.get_local_ip()}:{args.port}"
+        p.success(f"Relay listening on all network interfaces, port {args.port}.")
+        p.key_value("Same Wi-Fi URL", lan_url)
+        p.info("Use that exact URL with --relay-url on both the sharing and receiving devices.")
+        p.info("127.0.0.1 and localhost only work on this relay computer.")
+        p.info("For off-site sharing, host this relay on a public server or configure router port forwarding and firewall access; use HTTPS through a TLS reverse proxy.")
+    else:
+        p.success(f"Relay listening at {url}")
+        p.info("Use this exact URL with --relay-url on both devices. A loopback address only works on this computer.")
     p.info("Press Ctrl+C to stop.")
     try:
         while True:
@@ -600,6 +648,19 @@ def cmd_relay_start(args):
             time.sleep(3600)
     except KeyboardInterrupt:
         p.info("Relay stopped.")
+    return 0
+
+
+def cmd_desktop(args):
+    """Launch the optional Tk desktop shell without duplicating CLI logic."""
+    import subprocess
+    import sys
+
+    gui = Path(__file__).with_name("edr_gui.py")
+    if not gui.exists():
+        raise e.CliError("EDR Desktop is not installed with this build.")
+    subprocess.Popen([sys.executable, str(gui)], cwd=str(gui.parent))
+    p.success("EDR Desktop started.")
     return 0
 
 
@@ -843,7 +904,7 @@ def get_npm_global_prefix():
     return Path(prefix) if prefix else None
 
 
-def start_profile(item, port=None, forever=False, dry_run=False, skip_guard=False, watch=False, show_qr=True):
+def start_profile(item, port=None, forever=False, dry_run=False, skip_guard=False, watch=False, show_qr=True, relay_url=None, fast=False):
     folder = Path(item["path"])
     summary = s.project_summary(root_dir=folder, include_cli=item.get("include_cli", False))
     if summary["files"] == 0:
@@ -861,9 +922,11 @@ def start_profile(item, port=None, forever=False, dry_run=False, skip_guard=Fals
         forever=forever,
         non_network=item.get("non_network", False),
         relay_id=item.get("relay_id"),
+        relay_url=relay_url or item.get("relay_url"),
         skip_guard=skip_guard,
         watch=watch,
         show_qr=show_qr,
+        fast=fast or item.get("fast", False),
     )
 
 
@@ -1005,12 +1068,28 @@ def apply_sharer_edits(store, key, item, args):
         item["watch"] = False
         changed = True
 
+    if hasattr(args, "fast"):
+        item["fast"] = True
+        changed = True
+    if hasattr(args, "no_fast"):
+        item["fast"] = False
+        changed = True
+
     if hasattr(args, "network"):
         if item.get("non_network"):
             item["non_network"] = False
             item.pop("relay_id", None)
             item.pop("relay_code", None)
+            item.pop("relay_url", None)
             changed = True
+
+    if hasattr(args, "relay_url"):
+        relay_url = (args.relay_url or "").strip().rstrip("/")
+        if relay_url:
+            item["relay_url"] = relay_url
+        else:
+            item.pop("relay_url", None)
+        changed = True
 
     if hasattr(args, "non_network"):
         item["non_network"] = True
@@ -1038,12 +1117,13 @@ def _print_sharer_details(item, share_id):
     p.key_value("Port", item["port"])
     p.key_value("Auto", "yes" if item.get("auto") else "no")
     p.key_value("Watch", "yes" if item.get("watch") else "no")
+    p.key_value("Fast mode", "yes" if item.get("fast") else "no")
     if item.get("name"):
         p.key_value("Name", item["name"])
     if item.get("non_network"):
         p.key_value("Network", "relay (anywhere)")
         p.key_value("Share code", item.get("relay_code", ""))
-        p.key_value("Relay", r.relay_base_url())
+        p.key_value("Relay", item.get("relay_url") or r.relay_base_url())
     else:
         p.key_value("Network", "LAN")
 

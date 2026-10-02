@@ -1,0 +1,9 @@
+[package]
+name = "edr-fast-core"
+version = "0.1.0"
+edition = "2021"
+description = "Optional high-throughput primitives for EDR"
+
+[[bin]]
+name = "edr-fast-core"
+path = "src/main.rs"
