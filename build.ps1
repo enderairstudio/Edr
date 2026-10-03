@@ -358,3 +358,14 @@ Write-Host "  $zipInstall" -ForegroundColor Gray
 Write-Host ""
 Write-Host "If Smart App Control blocks the EXE, use START-HERE.cmd in the folder above." -ForegroundColor Yellow
 Pop-Location
+
+# GitHub Actions' `shell: pwsh` wrapper runs `exit $LASTEXITCODE` after this
+# script returns. $LASTEXITCODE is left over from the LAST native command
+# invoked anywhere in the script -- which can easily be an intentionally
+# tolerated non-zero exit (e.g. `npm whoami` failing because CI has no npm
+# login configured, which Test-NpmLoggedIn/Publish-NpmPackage already handle
+# gracefully above). Without resetting it, that stale non-zero code silently
+# becomes the whole step's reported exit code even though every real build
+# step above succeeded. Everything reaching this line means the build
+# actually succeeded, so say so explicitly.
+exit 0
