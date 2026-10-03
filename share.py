@@ -18,6 +18,8 @@ import watch as w
 DEFAULT_PORT = 5005
 PROTOCOL_MAGIC = b"EDR1"
 SOCKET_CHUNK_SIZE = 1024 * 1024
+MAX_EXTRACT_BYTES = int(os.environ.get("EDR_MAX_EXTRACT_BYTES", 20 * 1024 * 1024 * 1024))  # 20 GiB
+MAX_COMPRESSION_RATIO = int(os.environ.get("EDR_MAX_COMPRESSION_RATIO", 300))
 IGNORE_DIRS = {'.edr', '.git', '__pycache__', 'venv', '.venv', 'node_modules', '.mypy_cache', '.pytest_cache', 'dist', 'build', 'python', 'launcher'}
 IGNORE_FILES = {'project_payload.zip'}
 CLI_FILES = {
@@ -529,6 +531,9 @@ def receive_payload_to_tempfile(sock):
     temp = tempfile.NamedTemporaryFile(prefix="edr-pull-", suffix=".zip", delete=False)
     temp_path = Path(temp.name)
     received = 0
+    # Unlike the relay path (capped by relay.MAX_ROOM_BYTES), a direct LAN
+    # sender could otherwise stream an unbounded amount of data and fill the
+    # receiver's disk before the post-download zip-bomb check ever runs.
     try:
         with temp:
             while True:
@@ -537,6 +542,11 @@ def receive_payload_to_tempfile(sock):
                     break
                 temp.write(chunk)
                 received += len(chunk)
+                if received > MAX_EXTRACT_BYTES:
+                    raise e.CliError(
+                        f"Sender tried to send more than the max allowed download size "
+                        f"({format_bytes(MAX_EXTRACT_BYTES)}). Aborted."
+                    )
                 if expected_bytes:
                     p.progress("downloading project", min(99, int(received * 100 / expected_bytes)))
                 else:
@@ -592,10 +602,6 @@ def choose_target_dir(manifest, target_dir=None, force=False):
 def safe_folder_name(value):
     cleaned = "".join(ch if ch.isalnum() or ch in "._-" else "-" for ch in value.strip())
     return cleaned.strip(".-") or "received-project"
-
-
-MAX_EXTRACT_BYTES = int(os.environ.get("EDR_MAX_EXTRACT_BYTES", 20 * 1024 * 1024 * 1024))  # 20 GiB
-MAX_COMPRESSION_RATIO = int(os.environ.get("EDR_MAX_COMPRESSION_RATIO", 300))
 
 
 def _check_zip_bomb(archive):

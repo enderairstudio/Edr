@@ -136,6 +136,60 @@ function Sync-NpmPackageVersion {
     }
 }
 
+function Sync-VersionInfoFile {
+    # version_info.py is PyInstaller's Windows file-metadata spec (FileVersion
+    # / ProductVersion shown in Explorer -> Properties -> Details). Nothing
+    # else regenerates it, so without this it silently drifts from the real
+    # VERSION in print.py release after release.
+    param([string]$Version)
+
+    $versionInfoPath = Join-Path $Root "version_info.py"
+    if (-not (Test-Path $versionInfoPath)) {
+        Write-Host "version_info.py not found; skipping version metadata sync." -ForegroundColor Yellow
+        return
+    }
+
+    $parts = $Version.Split(".")
+    while ($parts.Count -lt 3) { $parts += "0" }
+    $tuple = "($($parts[0]), $($parts[1]), $($parts[2]), 0)"
+    $dotted = "$($parts[0]).$($parts[1]).$($parts[2]).0"
+
+    $content = Get-Content $versionInfoPath -Raw
+    $updated = $content `
+        -replace 'filevers=\([^)]*\)', "filevers=$tuple" `
+        -replace 'prodvers=\([^)]*\)', "prodvers=$tuple" `
+        -replace '"FileVersion",\s*"[^"]*"', "`"FileVersion`", `"$dotted`"" `
+        -replace '"ProductVersion",\s*"[^"]*"', "`"ProductVersion`", `"$dotted`""
+
+    if ($updated -ne $content) {
+        Write-Host "Updating version_info.py to $dotted..." -ForegroundColor Cyan
+        Set-Content -Path $versionInfoPath -Value $updated -Encoding UTF8 -NoNewline
+    }
+
+    $setupInstallerPath = Join-Path $Root "setup_installer.py"
+    if (Test-Path $setupInstallerPath) {
+        $siContent = Get-Content $setupInstallerPath -Raw
+        $siUpdated = $siContent -replace 'APP_VERSION = "[^"]*"', "APP_VERSION = `"$Version`""
+        if ($siUpdated -ne $siContent) {
+            Write-Host "Updating setup_installer.py to $Version..." -ForegroundColor Cyan
+            Set-Content -Path $setupInstallerPath -Value $siUpdated -Encoding UTF8 -NoNewline
+        }
+    }
+
+    foreach ($issName in @("EDR-Setup.iss", "EDR-Setup-Full.iss")) {
+        $issPath = Join-Path $Root "installer\$issName"
+        if (-not (Test-Path $issPath)) { continue }
+        $issContent = Get-Content $issPath -Raw
+        $issUpdated = $issContent `
+            -replace '#define MyAppVersion "[^"]*"', "#define MyAppVersion `"$Version`"" `
+            -replace 'VersionInfoVersion=[0-9.]+', "VersionInfoVersion=$dotted"
+        if ($issUpdated -ne $issContent) {
+            Write-Host "Updating $issName to $dotted..." -ForegroundColor Cyan
+            Set-Content -Path $issPath -Value $issUpdated -Encoding UTF8 -NoNewline
+        }
+    }
+}
+
 function Get-NpmPackageName {
     $packagePath = Join-Path $Root "package.json"
     if (-not (Test-Path $packagePath)) {
@@ -281,6 +335,7 @@ if ($BundlePython) {
 
 $Version = Get-EdrVersion
 Sync-NpmPackageVersion -Version $Version
+Sync-VersionInfoFile -Version $Version
 Publish-NpmPackage -Version $Version
 
 Write-Host ""
