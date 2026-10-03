@@ -7,6 +7,17 @@ param(
     [switch]$SkipNpmPublish
 )
 
+# NOTE: PowerShell 7.3+ defaults $PSNativeCommandUseErrorActionPreference to
+# $true, which means any native .exe exiting non-zero (npm, python, ISCC,
+# csc, ...) immediately becomes a terminating error under
+# $ErrorActionPreference = "Stop" -- bypassing this script's own
+# `if ($LASTEXITCODE -ne 0)` handling entirely and crashing the whole build
+# the moment, say, `npm whoami` fails on a CI runner with no npm login
+# configured. Force classic behavior so our own exit-code checks are what
+# actually decide success/failure, not pwsh's native-command strictness.
+# (Harmless no-op assignment on Windows PowerShell 5.1, which predates this
+# preference variable.)
+$PSNativeCommandUseErrorActionPreference = $false
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
 $DistEdr = Join-Path $Root "dist\edr"
@@ -287,6 +298,10 @@ if ((Get-Command py -ErrorAction SilentlyContinue) -or (Get-Command python -Erro
     Get-ChildItem "$DistEdr\app\__pycache__" -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
 }
 
+$Version = Get-EdrVersion
+Sync-NpmPackageVersion -Version $Version
+Sync-VersionInfoFile -Version $Version
+
 Write-Host "Building EDR-Setup.exe (Inno Setup)..." -ForegroundColor Cyan
 $Iscc = Get-Iscc
 if (-not $Iscc) {
@@ -333,9 +348,6 @@ if ($BundlePython) {
     Write-Host "BundlePython not wired in this build script yet." -ForegroundColor Yellow
 }
 
-$Version = Get-EdrVersion
-Sync-NpmPackageVersion -Version $Version
-Sync-VersionInfoFile -Version $Version
 Publish-NpmPackage -Version $Version
 
 Write-Host ""
