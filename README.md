@@ -7,9 +7,20 @@ EDR is a command-line tool for sending a project folder from one computer to ano
 edr share .                         edr pull <sender-ip>
 ```
 
+**Why people use it:** no accounts, no git remote, no cloud. One command on each side, a safety scan on both ends, and a pull that can never leave your folder half-written.
+
+| | |
+|---|---|
+| **Fast** | Streams straight to the other machine; progress follows the real work and never sleeps. `--fast` skips compression. |
+| **Light on RAM** | Memory stays flat no matter how big the project is (30 MiB for a 200 MB share in our test). |
+| **Safe to cancel** | Pulls are staged and rolled back on failure or Ctrl+C. EDR never touches the sender's folder. |
+| **Scanned** | EDR Guard checks the project before sending and the archive again before extracting. |
+| **Anywhere** | Same Wi-Fi: direct TCP. Different networks: a relay code (`Edrnko_<id>`), with an optional Rust relay binary. |
+
 - [What EDR is / is not](#what-edr-is--is-not)
 - [Install](#install)
 - [Quick start](#quick-start)
+- [See it in action](#see-it-in-action)
 - [Command reference](#command-reference)
 - [What gets shared](#what-gets-shared)
 - [How a transfer works](#how-a-transfer-works)
@@ -18,6 +29,7 @@ edr share .                         edr pull <sender-ip>
 - [Configuration](#configuration)
 - [Performance](#performance)
 - [Troubleshooting](#troubleshooting)
+- [FAQ](#faq)
 - [Development](#development)
 - [Build locally](#build-locally) · [CI](#ci) · [Uninstall](#uninstall)
 
@@ -38,7 +50,7 @@ edr share .                         edr pull <sender-ip>
 - Cloud storage, backup software, or a public file host.
 - A guarantee that files are safe. Guard is a tripwire, not an antivirus ([details](#edr-guard)).
 - A remote desktop or remote shell.
-- A way to share secrets, private keys, credentials or production data. The relay speaks plain HTTP unless you put TLS in front of it ([details](#security-model)).
+- A way to share secrets, private keys, credentials or production data. **Nothing EDR sends is encrypted**: LAN transfers are plain TCP, and the relay speaks plain HTTP unless you put TLS in front of it ([details](#security-model)). Use it on networks you trust.
 
 ## Install
 
@@ -83,6 +95,47 @@ edr pull Edrnko_<id> --relay-url http://<relay-ip>:8765
 **Maximum speed on a fast LAN:** add `--fast` to `create`, `start`, `push` or `share`. Files are stored without compression, which usually helps with large folders, already-compressed data and slower CPUs. Leave it off when the network is the bottleneck.
 
 **Keep serving / follow changes:** `--auto` keeps serving after each pull, `--watch` notices folder changes while waiting so the next pull gets the latest files.
+
+## See it in action
+
+A real LAN share and pull of a small project (output trimmed to the final line of each progress stage):
+
+```text
+sender$ edr share .
+Sharer         ephemeral
+Folder         /home/me/demo
+Files          11
+Payload        2.9 MB
+Mode           once
+IP             192.168.1.20
+Port           5005
+[INFO] Pull command: edr pull 192.168.1.20
+[INFO] Waiting for receivers at 192.168.1.20:5005
+waiting for receiver.... done
+[SUCCESS] Connected by 192.168.1.31:42376
+running security scan.... done
+copying files.... done
+sending payload.... done
+[SUCCESS] Sent 2.9 MB (LAN).
+```
+
+```text
+receiver$ edr pull 192.168.1.20 --to ./demo-copy
+connecting to sharer.... done
+downloading project.... done
+Remote         192.168.1.20:5005
+scanning received files.... done
+Folder         /home/me/demo-copy
+Files          11
+extracting files.... done
+[SUCCESS] Pulled 11 files into /home/me/demo-copy.
+```
+
+For a relay share the sender prints the code and the exact command for the other side:
+
+```text
+[INFO] Pull command: edr pull Edrnko_k3x9q2m7ab --relay-url https://relay.example.com
+```
 
 ## Command reference
 
@@ -283,6 +336,26 @@ Run `edr doctor` first. It checks Python, EDR's files, free disk space, port ava
 | `Invalid relay id` | Relay ids are 4-64 lowercase letters/digits. Drop `--id` or use `--idnew`. |
 | `... exists. Use --force to overwrite it.` | Pull into a new folder with `--to`, or add `--force` (it restores the original if the pull fails). |
 | Need the full Python traceback | Set `EDR_DEBUG=1`. |
+
+## FAQ
+
+**Do both machines need EDR?** Yes. The receiver runs `edr pull`; the sender runs `edr start` / `edr share`.
+
+**Is it a sync tool?** No. Each pull is a one-way snapshot of the sender's folder at that moment. Use `--watch` or `--auto` on the sender to keep offering the latest files.
+
+**Is it encrypted?** No. LAN transfers are plain TCP and relay transfers are plain HTTP unless the relay sits behind HTTPS. Keep secrets out of shared folders.
+
+**Can a pull resume after a dropped connection?** Not yet. A failed pull leaves your folder untouched and you simply pull again (relay payloads stay available if the receiver disconnects mid-download).
+
+**How big can a project be?** The receiver refuses downloads over 20 GiB (`EDR_MAX_EXTRACT_BYTES`) and relays accept up to 8 GiB per project by default (`EDR_RELAY_MAX_BYTES`). Memory use does not grow with project size.
+
+**Will it overwrite my files?** Not unless you pass `--force`. Without it, a pull aborts before writing anything if any file already exists. With it, a failed pull restores what it was about to replace.
+
+**Why was my `.git` / `node_modules` / `build` folder not sent?** They are on the ignore list, see [What gets shared](#what-gets-shared).
+
+**Does it work across the internet without a relay?** Only if the sender's port is reachable (port-forwarding or a VPN). The relay exists so neither side needs an open port.
+
+**Do I need the Rust relay?** No. The built-in Python relay does the same job. The Rust one is a single binary for a server where you would rather not run Python.
 
 ## Development
 
