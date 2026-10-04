@@ -24,25 +24,5 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Compile all modules
         run: python -m py_compile share.py relay.py handler.py guard.py print.py doctor_checks.py watch.py qrterm.py command.py error.py
-      - name: Unit and end-to-end tests
-        shell: bash
-        run: |
-          set +e
-          python tests/ci_runner.py
-          code=$?
-          tail -n 8 test-output.txt
-          if [ "$code" -ne 0 ]; then
-            # Surface failures / hangs as an annotation (readable without downloading logs).
-            python - <<'PY'
-          import os, re
-          def read(path):
-              return open(path, encoding="utf-8", errors="replace").read().replace("\r", "\n") if os.path.exists(path) else ""
-          text, hang = read("test-output.txt"), read("hang-traceback.txt")
-          starts = [m.start() for m in re.finditer(r"^(ERROR|FAIL): ", text, re.M)]
-          body = text[starts[0]:] if starts else "LAST OUTPUT:\n" + text[-3000:]
-          if hang.strip():
-              body = "HANG WATCHDOG FIRED\n" + hang[:9000] + "\n\n" + body
-          print("::error title=unittest failures::" + body[:20000].replace("%", "%25").replace("\n", "%0A"))
-          PY
-          fi
-          exit $code
+      - name: Unit and end-to-end tests (one process per module, with timeouts)
+        run: python tests/ci_runner.py
