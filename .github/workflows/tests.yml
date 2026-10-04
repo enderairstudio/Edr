@@ -24,4 +24,20 @@ jobs:
       - name: Compile all modules
         run: python -m py_compile share.py relay.py handler.py guard.py print.py doctor_checks.py watch.py qrterm.py command.py error.py
       - name: Unit and end-to-end tests
-        run: python -m unittest discover -s tests -v
+        shell: bash
+        run: |
+          set +e
+          python -m unittest discover -s tests -v > test-output.txt 2>&1
+          code=$?
+          tail -n 8 test-output.txt
+          if [ "$code" -ne 0 ]; then
+            # Surface the failing tests as an annotation on the check run.
+            python - <<'PY'
+          import re
+          text = open("test-output.txt", encoding="utf-8", errors="replace").read().replace("\r", "\n")
+          starts = [m.start() for m in re.finditer(r"^(ERROR|FAIL): ", text, re.M)]
+          body = (text[starts[0]:] if starts else text[-8000:])[:20000]
+          print("::error title=unittest failures::" + body.replace("%", "%25").replace("\n", "%0A"))
+          PY
+          fi
+          exit $code
