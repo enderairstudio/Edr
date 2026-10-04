@@ -30,8 +30,19 @@ class RelayRoundTripTests(unittest.TestCase):
         self.client = r.RelayClient(self.base)
 
     def tearDown(self):
+        self.client.close()
         self.server.shutdown()
         self.server.server_close()
+
+    def _wait_for(self, predicate, timeout=3.0):
+        """The relay flips a room to "consumed" a few ms after the last byte
+        left the socket, so state checks right after a download must poll."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if predicate():
+                return True
+            time.sleep(0.02)
+        return predicate()
 
     def test_small_payload_roundtrip(self):
         room = r.generate_relay_id()
@@ -42,7 +53,7 @@ class RelayRoundTripTests(unittest.TestCase):
         self.assertEqual(status["bytes"], len(payload))
         self.assertEqual(self.client.download(room), payload)
         # Room is consumed on download.
-        self.assertFalse(self.client.room_status(room)["ready"])
+        self.assertTrue(self._wait_for(lambda: not self.client.room_status(room)["ready"]))
 
     def test_multi_chunk_payload_roundtrip(self):
         room = r.generate_relay_id()
@@ -85,7 +96,7 @@ class RelayRoundTripTests(unittest.TestCase):
         spool_path = r._STORE._spool_dir / f"{room}.part"
         self.assertTrue(spool_path.exists())
         self.client.download(room)
-        self.assertFalse(spool_path.exists())
+        self.assertTrue(self._wait_for(lambda: not spool_path.exists()))
 
     def test_spool_file_removed_after_delete(self):
         room = r.generate_relay_id()
