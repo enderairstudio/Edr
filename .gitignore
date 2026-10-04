@@ -44,3 +44,5 @@ Thumbs.db
 
 # --- Local-only -------------------------------------------------------------
 Website
+test-output.txt
+hang-traceback.txt
