@@ -2,6 +2,7 @@
 
 import json
 import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -58,6 +59,10 @@ MAX_SCAN_BYTES = 512 * 1024
 # Legitimate EDR launcher scripts (project root only).
 ALLOWED_FILENAMES = {"edr.cmd", "edr.ps1"}
 
+# EDR never sends its own state folder, so an archive that carries one is
+# trying to plant a sharer profile (path, relay, skip_guard) on the receiver.
+STATE_DIR_NAME = ".edr"
+
 
 class ThreatFound(Exception):
     def __init__(self, path, reason):
@@ -66,18 +71,35 @@ class ThreatFound(Exception):
         super().__init__(f"{path}: {reason}")
 
 
-def scan_path(path: Path, archive_name=None):
-    """Raise ThreatFound if a single file is unsafe."""
-    name = archive_name or path.name
-    lower = name.lower()
+def _check_name(name):
+    """Name-based checks shared by project scans and received archives.
+    Returns the (normalised) lower-case suffix."""
+    parts = [part for part in name.replace("\\", "/").split("/") if part]
+    if STATE_DIR_NAME in (part.lower() for part in parts[:-1]):
+        raise ThreatFound(name, "EDR state folder inside a shared project")
+    if sys.platform == "win32" and ":" in name:
+        raise ThreatFound(name, "invalid file name (NTFS stream / drive syntax)")
+
+    # Windows silently drops trailing dots and spaces ("evil.exe." -> "evil.exe"),
+    # so normalise before looking at extensions.
+    base = parts[-1].rstrip(" .") if parts else ""
+    lower = base.lower()
 
     if SUSPICIOUS_DOUBLE_EXT.search(lower):
         raise ThreatFound(name, "double extension disguise")
 
     suffix = Path(lower).suffix
     if suffix in BLOCKED_EXTENSIONS:
-        if Path(name).name.lower() not in ALLOWED_FILENAMES:
+        # The launcher scripts are only legitimate at the project root.
+        if not (len(parts) == 1 and lower in ALLOWED_FILENAMES):
             raise ThreatFound(name, f"blocked file type ({suffix})")
+    return suffix
+
+
+def scan_path(path: Path, archive_name=None):
+    """Raise ThreatFound if a single file is unsafe."""
+    name = archive_name or path.name
+    suffix = _check_name(name)
 
     try:
         size = path.stat().st_size
@@ -87,9 +109,11 @@ def scan_path(path: Path, archive_name=None):
     if size == 0:
         return
 
-    read_len = min(size, MAX_SCAN_BYTES)
+    # Read only the scan window; read_bytes() would pull a multi-GB file
+    # into memory just to look at its first 512 KiB.
     try:
-        data = path.read_bytes()[:read_len]
+        with path.open("rb") as handle:
+            data = handle.read(min(size, MAX_SCAN_BYTES))
     except OSError:
         return
 
@@ -219,17 +243,14 @@ def scan_zip_buffer(buffer, on_progress=None):
         members = [m for m in archive.infolist() if not m.is_dir()]
         total = len(members) or 1
         for index, member in enumerate(members, start=1):
-            if member.filename.startswith("__MACOSX"):
-                continue
-            lower = member.filename.lower()
-            suffix = Path(lower).suffix
-            if SUSPICIOUS_DOUBLE_EXT.search(lower):
-                raise ThreatFound(member.filename, "double extension disguise")
-            if suffix in BLOCKED_EXTENSIONS:
-                if Path(member.filename).name.lower() not in ALLOWED_FILENAMES:
-                    raise ThreatFound(member.filename, f"blocked file type ({suffix})")
+            # No special-casing of "__MACOSX/": whatever is in the archive is
+            # extracted, so whatever is in the archive gets scanned.
+            suffix = _check_name(member.filename)
 
-            data = archive.read(member)[:MAX_SCAN_BYTES]
+            # Decompress only the scan window: archive.read() would inflate a
+            # zip bomb member completely, before any size check could run.
+            with archive.open(member) as handle:
+                data = handle.read(MAX_SCAN_BYTES)
             _scan_content(member.filename, data, suffix)
             if on_progress:
                 on_progress(int(index * 100 / total))

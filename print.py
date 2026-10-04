@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 
@@ -7,7 +8,13 @@ _active_stage = None
 _work_scale = 1.0
 _stage_state = None
 
-# Display pacing: larger projects spend longer on each stage label.
+# Optional "animated" progress: EDR_PACED_PROGRESS=1 holds every stage on screen
+# for a minimum time (up to 18 s each), which makes transfers visibly slower.
+# Off by default: progress reflects the real work and never sleeps.
+PACED_PROGRESS = os.environ.get("EDR_PACED_PROGRESS", "").strip().lower() in {"1", "true", "yes", "on"}
+_MIN_DRAW_INTERVAL = 0.05
+
+# Display pacing (only used when PACED_PROGRESS is on).
 _TICK_SEC = 0.055
 _BASE_STAGE_SEC = 0.65
 _MAX_STAGE_SEC = 18.0
@@ -135,6 +142,18 @@ def progress(label, percent):
     state = _begin_stage(label)
     state.target = max(state.target, percent)
 
+    if not PACED_PROGRESS:
+        if percent >= 100:
+            _draw(label, 100)
+            _stage_state = None
+            return
+        now = time.monotonic()
+        if state.target != state.display and (state.display < 0 or now - state.last_draw >= _MIN_DRAW_INTERVAL):
+            state.display = state.target
+            state.last_draw = now
+            _draw(label, state.display)
+        return
+
     if percent >= 100:
         _finish_stage(state)
         return
@@ -190,10 +209,16 @@ def transfer(action, current, total, path, size=None):
 
 def prompt_name_countdown(seconds=3):
     """Prompt for a display name; returns None if the countdown expires."""
-    import sys
     import threading
 
     progress_finish()
+    # Scripts / CI / piped input: nobody can answer, so don't stall for 3 s.
+    try:
+        interactive = sys.stdin is not None and sys.stdin.isatty()
+    except (AttributeError, ValueError):
+        interactive = False
+    if not interactive:
+        return None
     result = [None]
 
     def reader():
@@ -289,7 +314,7 @@ def help_menu():
     _help_cmd("edr push [id|name]", "Serve once from a saved profile")
     _help_cmd("edr share [folder]", "One-off share (no profile)")
     _help_cmd("edr pull <ip|Edrnko_id>", "Download a shared project")
-    _help_cmd("edr relay start", "Relay server (cross-network; optional)")
+    _help_cmd("edr relay start [--engine rust]", "Relay server (cross-network; optional)")
 
     _help_section("Tools")
     _help_cmd("edr pack [zip]", "Zip a folder locally")
@@ -309,7 +334,7 @@ def help_menu():
     _help_cmd("--idnew", "New random relay id")
     _help_cmd("--relay-url <url>", "Relay URL shared by sender and receiver")
     _help_cmd("--fast", "Skip ZIP compression for maximum throughput")
-    _help_cmd("--name <name>", "Display name (3s prompt if omitted)")
+    _help_cmd("--name <name>", "Display name (asked in a terminal if omitted)")
     _help_cmd("--port <port>", "LAN TCP port (default 5005)")
     _help_cmd("--allow-self", "Allow pull on this same PC")
     _help_cmd("--skip-guard", "Skip security scan when sending")

@@ -35,7 +35,7 @@ def check_python_version():
 
 def check_handler_files(handler_path):
     app_dir = handler_path.parent
-    missing = [name for name in ("command.py", "share.py", "guard.py", "relay.py", "watch.py", "qrterm.py") if not (app_dir / name).exists()]
+    missing = [name for name in ("command.py", "handler.py", "share.py", "guard.py", "relay.py", "watch.py", "qrterm.py", "error.py", "print.py", "doctor_checks.py") if not (app_dir / name).exists()]
     if missing:
         return _fail(f"Missing app files: {', '.join(missing)}")
     return _ok(f"App bundle at {app_dir}")
@@ -64,7 +64,7 @@ def check_port_available(port):
 
 def check_relay(base_url=None):
     base = (base_url or r.relay_base_url()).rstrip("/")
-    url = f"{base}/v1/rooms/__doctor__/status"
+    url = f"{base}/v1/health"
     try:
         req = urlrequest.Request(url, method="GET")
         with urlrequest.urlopen(req, timeout=3) as response:

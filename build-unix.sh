@@ -105,7 +105,7 @@ Package: edr-project-sharer
 Version: ${VERSION}
 Section: utils
 Priority: optional
-Architecture: amd64
+Architecture: all
 Depends: python3
 Maintainer: Ender Air Studio
 Description: EDR Project Sharer

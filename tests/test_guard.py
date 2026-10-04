@@ -70,3 +70,82 @@ class TextPatternDetectionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ArchiveAndPathHardeningTests(unittest.TestCase):
+    """Regressions for guard bypasses found in the October 2026 review."""
+
+    def _zip(self, members):
+        import io
+        import zipfile
+
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            for name, data in members.items():
+                archive.writestr(name, data)
+        buffer.seek(0)
+        return buffer
+
+    def assert_archive_blocked(self, name):
+        with self.assertRaises(g.ThreatFound, msg=name):
+            g.scan_zip_buffer(self._zip({name: b"plain harmless text"}))
+
+    def test_macosx_prefix_is_not_a_free_pass(self):
+        self.assert_archive_blocked("__MACOSX/payload.exe")
+
+    def test_trailing_dot_or_space_cannot_hide_an_extension(self):
+        # Windows drops trailing dots/spaces when creating the file.
+        self.assert_archive_blocked("evil.exe.")
+        self.assert_archive_blocked("evil.exe ")
+        self.assert_archive_blocked("evil.exe. .")
+
+    def test_launcher_scripts_only_allowed_at_project_root(self):
+        g.scan_zip_buffer(self._zip({"edr.cmd": b"@echo off"}))  # legit root launcher
+        self.assert_archive_blocked("sub/dir/edr.cmd")
+        self.assert_archive_blocked("a/edr.ps1")
+
+    def test_edr_state_folder_is_rejected(self):
+        self.assert_archive_blocked(".edr/sharers.json")
+        self.assert_archive_blocked("project/.edr/sharers.json")
+
+    def test_backslash_paths_are_normalised(self):
+        self.assert_archive_blocked("sub\\dir\\payload.exe")
+
+    def test_windows_colon_names_rejected_only_on_windows(self):
+        from unittest import mock
+
+        with mock.patch.object(g.sys, "platform", "win32"):
+            with self.assertRaises(g.ThreatFound):
+                g._check_name("notes.txt:hidden.exe")
+        with mock.patch.object(g.sys, "platform", "linux"):
+            g._check_name("release:notes.txt")  # legal on POSIX
+
+    @unittest.skipIf(sys.platform == "win32", "needs the POSIX resource module")
+    def test_zip_bomb_member_is_scanned_without_inflating_it(self):
+        import resource
+
+        member = bytes(64 * 1024 * 1024)  # 64 MiB of zeros -> a few KiB compressed
+        buffer = self._zip({"big.txt": member})
+        before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        g.scan_zip_buffer(buffer)
+        grown_kib = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - before
+        self.assertLess(grown_kib, 32 * 1024, "scan inflated the whole member into memory")
+
+    def test_scan_path_reads_only_the_scan_window(self):
+        import tempfile
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as folder:
+            big = Path(folder) / "big.bin"
+            big.write_bytes(bytes(g.MAX_SCAN_BYTES * 3))
+            with mock.patch.object(Path, "read_bytes", side_effect=AssertionError("read the whole file")):
+                g.scan_path(big)
+
+    def test_threat_beyond_scan_window_is_not_seen_but_inside_it_is(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as folder:
+            hit = Path(folder) / "hit.txt"
+            hit.write_bytes(b"x" * 100 + b"invoke-expression" + b"x" * 100)
+            with self.assertRaises(g.ThreatFound):
+                g.scan_path(hit)

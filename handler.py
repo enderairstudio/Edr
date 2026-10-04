@@ -43,6 +43,13 @@ def main(argv=None):
     except e.CliError as err:
         p.error(str(err))
         return 1
+    except (RuntimeError, OSError) as err:
+        # Relay unreachable, port busy, permission denied, ...: a one-line
+        # message beats a traceback. EDR_DEBUG=1 restores the traceback.
+        if os.environ.get("EDR_DEBUG"):
+            raise
+        p.error(str(err))
+        return 1
 
 
 def build_parser():
@@ -171,6 +178,12 @@ def build_parser():
     relay_start = relay_sub.add_parser("start", help="start local relay server", allow_abbrev=False)
     relay_start.add_argument("--host", default="0.0.0.0")
     relay_start.add_argument("--port", type=valid_port, default=8765)
+    relay_start.add_argument(
+        "--engine",
+        choices=["auto", "python", "rust"],
+        default="auto",
+        help="relay implementation: rust uses the edr-relay binary (auto = rust if installed)",
+    )
     relay_start.set_defaults(func=cmd_relay_start)
 
     return parser
@@ -233,6 +246,11 @@ def cmd_create(args):
             relay_id = args.share_id
             if relay_id.startswith(r.RELAY_PREFIX):
                 relay_id = relay_id[len(r.RELAY_PREFIX):]
+            if not r.is_valid_room_id(relay_id):
+                raise e.CliError(
+                    f"Invalid relay id '{relay_id}'. Use 4-64 lowercase letters and digits "
+                    f"(or drop --id to get a random one)."
+                )
         else:
             # --idnew has no effect here: with no --id given there is no
             # existing code to reuse in the first place, so a fresh one is
@@ -628,14 +646,50 @@ def cmd_uninstall(args):
     return 0
 
 
+def find_rust_relay():
+    """Locate the optional edr-relay binary (EDR_RELAY_BIN, PATH, or next to the CLI)."""
+    explicit = os.environ.get("EDR_RELAY_BIN")
+    if explicit and Path(explicit).is_file():
+        return explicit
+    found = shutil.which("edr-relay")
+    if found:
+        return found
+    app_dir = Path(__file__).resolve().parent
+    for name in ("edr-relay", "edr-relay.exe"):
+        candidate = app_dir / name
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
 def cmd_relay_start(args):
-    _, url = r.start_relay_server(host=args.host, port=args.port)
+    engine = getattr(args, "engine", "auto")
+    binary = find_rust_relay() if engine in {"auto", "rust"} else None
+    if engine == "rust" and not binary:
+        raise e.CliError(
+            "edr-relay binary not found. Build it with: cargo build --release --manifest-path "
+            "relay-rs/Cargo.toml  (then put it on PATH or set EDR_RELAY_BIN)."
+        )
+
+    if binary:
+        p.success(f"Starting Rust relay ({binary}) on {args.host}:{args.port}")
+        p.info("Set EDR_RELAY_URL (or pass --relay-url) on all devices that should use this relay.")
+        p.info("Press Ctrl+C to stop.")
+        try:
+            return subprocess.call([binary, "--host", args.host, "--port", str(args.port)])
+        except KeyboardInterrupt:
+            p.info("Relay stopped.")
+            return 0
+
+    try:
+        _, url = r.start_relay_server(host=args.host, port=args.port)
+    except OSError as err:
+        raise e.CliError(f"Cannot start the relay on {args.host}:{args.port}: {err}") from err
     p.success(f"Relay listening at {url}")
     p.info("Set EDR_RELAY_URL on all devices that should use this relay.")
     p.info("Press Ctrl+C to stop.")
     try:
         while True:
-            import time
             time.sleep(3600)
     except KeyboardInterrupt:
         p.info("Relay stopped.")
@@ -921,13 +975,22 @@ def load_store():
 def save_store(store):
     path = store_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(store, indent=2, sort_keys=True), encoding="utf-8")
+    # Write-then-rename: Ctrl+C or a crash mid-write must not leave a
+    # truncated sharers.json that wipes every saved profile.
+    temp = path.with_name(path.name + ".tmp")
+    temp.write_text(json.dumps(store, indent=2, sort_keys=True), encoding="utf-8")
+    os.replace(temp, path)
 
 
 def store_path():
     path = Path.home() / STATE_DIR / SHARERS_FILE
     legacy = Path.cwd() / STATE_DIR / SHARERS_FILE
-    if legacy.exists() and not path.exists():
+    # Old versions kept state next to the installed app. Only migrate from
+    # there: importing ".edr/sharers.json" from whatever folder you happen to
+    # be in would let a received project plant a sharer profile (path, relay,
+    # skip_guard) in your config.
+    legacy_trusted = Path.cwd().resolve() == Path(__file__).resolve().parent
+    if legacy_trusted and legacy.exists() and not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(legacy.read_text(encoding="utf-8"), encoding="utf-8")
     return path

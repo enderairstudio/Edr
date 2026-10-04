@@ -52,8 +52,13 @@ def print_qr(text, quiet=False):
         return False
 
 
-def pull_command_text(remote, port=None):
+def pull_command_text(remote, port=None, relay_url=None):
     if remote and str(remote).startswith("Edrnko_"):
+        # The receiver must talk to the same relay as the sender; without the
+        # flag it would silently fall back to a local relay nobody is using.
+        url = (relay_url or "").rstrip("/")
+        if url and url != "http://127.0.0.1:8765":
+            return f"edr pull {remote} --relay-url {url}"
         return f"edr pull {remote}"
     if port and int(port) != 5005:
         return f"edr pull {remote} --port {port}"
