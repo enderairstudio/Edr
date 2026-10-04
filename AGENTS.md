@@ -45,9 +45,8 @@ Transfer path:
 - `handler.py`: CLI parser and commands. `print.py`: help + progress. `guard.py`: scanning.
 - `tests/`: `test_share`, `test_handler`, `test_print`, `test_guard`, `test_relay`,
   `test_relay_protocol` (same suite against the Python AND Rust relay).
-- `relay-rs/ci/relay-rs.yml`: ready-made workflow that builds/tests the Rust relay (separate from
-  `release.yml`). NOT active yet: it has to be moved to `.github/workflows/`, and pushing workflow files
-  needs a GitHub token with the `workflow` scope (the session token lacked it).
+- `.github/workflows/relay-rs.yml`: builds/tests the Rust relay on Linux/Windows/macOS (separate from
+  `release.yml`).
 
 ## Adding a Python module (checklist)
 

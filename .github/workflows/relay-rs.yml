@@ -1,7 +1,3 @@
-# To enable: move this file to .github/workflows/relay-rs.yml
-#   git mv relay-rs/ci/relay-rs.yml .github/workflows/relay-rs.yml
-# (it lives here because pushing workflow files needs a token with the
-# `workflow` scope).
 name: relay-rs
 
 # Builds and tests the optional Rust relay (relay-rs/) and runs the shared

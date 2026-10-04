@@ -409,7 +409,7 @@ chmod +x build-unix.sh
 ## CI
 
 - Pushing a tag `vX.Y.Z` (for example `v0.5.16`) runs [`release.yml`](.github/workflows/release.yml) and publishes the platform installers.
-- [`relay-rs/ci/relay-rs.yml`](relay-rs/ci/relay-rs.yml) is a ready-made workflow that builds and tests the Rust relay on Linux, Windows and macOS, runs the protocol conformance suite and uploads the binaries as artifacts. It is not active until you move it to `.github/workflows/` (`git mv relay-rs/ci/relay-rs.yml .github/workflows/relay-rs.yml`); it does not touch the release workflow.
+- [`relay-rs.yml`](.github/workflows/relay-rs.yml) builds and tests the Rust relay on Linux, Windows and macOS, runs the protocol conformance suite and uploads the binaries as artifacts. It runs when `relay-rs/`, `relay.py` or the protocol tests change and does not touch the release workflow.
 
 ## Uninstall
 
