@@ -305,20 +305,18 @@ class SocketWriterTests(unittest.TestCase):
         left.close()
 
     def test_small_writes_are_batched_into_few_sends(self):
-        left, right = socket.socketpair()
+        # A recording stand-in for the socket: a real socketpair nobody reads
+        # from would block in sendall() once the kernel buffer fills (only ~8 KiB
+        # on macOS).
         sends = []
-        real_sendall = left.sendall
-        spy = mock.Mock(side_effect=lambda data: (sends.append(len(data)), real_sendall(data))[1])
-        wrapper = mock.Mock(sendall=spy)
-        writer = s._ProgressSocketWriter(wrapper, 100_000, buffer_size=10_000)
+        sink = mock.Mock(sendall=lambda data: sends.append(len(data)))
+        writer = s._ProgressSocketWriter(sink, 100_000, buffer_size=10_000)
         with quiet():
             for _ in range(50):
                 writer.write(b"y" * 1000)
             writer.flush()
         self.assertLessEqual(len(sends), 6)
         self.assertEqual(sum(sends), 50_000)
-        left.close()
-        right.close()
 
 
 class EndToEndTransferTests(TempDirCase):

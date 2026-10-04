@@ -126,9 +126,13 @@ class ArchiveAndPathHardeningTests(unittest.TestCase):
 
         member = bytes(64 * 1024 * 1024)  # 64 MiB of zeros -> a few KiB compressed
         buffer = self._zip({"big.txt": member})
-        before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        def peak_kib():
+            peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            return peak // 1024 if sys.platform == "darwin" else peak  # macOS reports bytes, Linux KiB
+
+        before = peak_kib()
         g.scan_zip_buffer(buffer)
-        grown_kib = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - before
+        grown_kib = peak_kib() - before
         self.assertLess(grown_kib, 32 * 1024, "scan inflated the whole member into memory")
 
     def test_scan_path_reads_only_the_scan_window(self):
