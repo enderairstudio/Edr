@@ -1,0 +1,27 @@
+name: tests
+
+# Full Python test suite on every platform EDR ships for.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unittest:
+    name: ${{ matrix.os }} / py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Compile all modules
+        run: python -m py_compile share.py relay.py handler.py guard.py print.py doctor_checks.py watch.py qrterm.py command.py error.py
+      - name: Unit and end-to-end tests
+        run: python -m unittest discover -s tests -v
