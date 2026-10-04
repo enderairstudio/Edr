@@ -1,0 +1,58 @@
+# To enable: move this file to .github/workflows/relay-rs.yml
+#   git mv relay-rs/ci/relay-rs.yml .github/workflows/relay-rs.yml
+# (it lives here because pushing workflow files needs a token with the
+# `workflow` scope).
+name: relay-rs
+
+# Builds and tests the optional Rust relay (relay-rs/) and runs the shared
+# protocol conformance suite against it. Does not touch the release workflow.
+on:
+  push:
+    paths:
+      - "relay-rs/**"
+      - "relay.py"
+      - "tests/test_relay_protocol.py"
+      - ".github/workflows/relay-rs.yml"
+  pull_request:
+    paths:
+      - "relay-rs/**"
+      - "relay.py"
+      - "tests/test_relay_protocol.py"
+      - ".github/workflows/relay-rs.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Rust toolchain
+        run: rustup toolchain install stable --profile minimal
+
+      - name: Cargo unit tests
+        run: cargo test --release --locked --manifest-path relay-rs/Cargo.toml
+
+      - name: Build release binary
+        run: cargo build --release --locked --manifest-path relay-rs/Cargo.toml
+
+      - name: Protocol conformance (Python relay and Rust relay)
+        run: python -m unittest tests.test_relay_protocol -v
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: edr-relay-${{ matrix.os }}
+          path: |
+            relay-rs/target/release/edr-relay
+            relay-rs/target/release/edr-relay.exe
+          if-no-files-found: error

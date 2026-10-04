@@ -1,0 +1,19 @@
+[package]
+name = "edr-relay"
+version = "0.1.0"
+edition = "2021"
+description = "Fast single-binary relay server for EDR Project Sharer (drop-in for `edr relay start`)"
+license = "MIT"
+publish = false
+
+[dependencies]
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "fs", "io-util", "time", "signal"] }
+bytes = "1"
+futures-util = { version = "0.3", default-features = false }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
