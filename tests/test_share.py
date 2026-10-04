@@ -214,8 +214,10 @@ class SafeExtractTests(TempDirCase):
         calls = {"n": 0}
 
         def interrupting(src, dst):
-            # staging->destination moves are the ones whose target is inside dest
-            if str(dst).startswith(str(dest)) and ".edr-staging" not in str(dst):
+            # Count only the staging -> destination moves (their source lives in
+            # the staging folder); compare path *parts*, not string prefixes,
+            # because Windows temp dirs can have 8.3 short-name aliases.
+            if ".edr-staging" in str(src) and "new" in Path(src).parts:
                 calls["n"] += 1
                 if calls["n"] == 3:  # a few files already moved
                     raise KeyboardInterrupt
