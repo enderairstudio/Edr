@@ -1,9 +1,46 @@
+# --- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.venv/
+venv/
+
+# --- Node / npm -----------------------------------------------------------
+node_modules/
+.npm-cache/
+npm-debug.log*
+*.tgz
+
+# --- Rust (relay-rs) ------------------------------------------------------
+# Cargo.lock IS committed: relay-rs is a binary, not a library.
+target/
+
+# --- Build output ---------------------------------------------------------
 build/
 dist/
-__pycache__/
-*.pyc
-.edr/
 *.spec.bak
 build/EDR-Setup-Full.generated.iss
+
+# --- EDR runtime / generated files -----------------------------------------
+.edr/
+project_payload.zip
+project_payload.zip.part
+guard-report.json
+guard-report.txt
+*.part
+
+# --- Editors / OS ---------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# --- Local-only -------------------------------------------------------------
 Website
-.npm-cache/
