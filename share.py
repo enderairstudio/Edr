@@ -463,8 +463,7 @@ def receive_project(ip_pin, port=DEFAULT_PORT, target_dir=None, force=False, rel
 
             manifest, zip_path = receive_payload_to_tempfile(client)
 
-        p.key_value("Remote", f"{ip_pin}:{port}")
-        return _extract_received(manifest, zip_path, target_dir, force)
+        return _extract_received(manifest, zip_path, target_dir, force, remote=f"{ip_pin}:{port}")
     except e.CliError:
         raise
     except TimeoutError:
@@ -480,11 +479,13 @@ def receive_project(ip_pin, port=DEFAULT_PORT, target_dir=None, force=False, rel
     return 0, Path(target_dir or ".").resolve()
 
 
-def _extract_received(manifest, zip_path, target_dir, force):
+def _extract_received(manifest, zip_path, target_dir, force, remote=None):
     """Guard-scan the staged archive, then extract it atomically. Always
     removes the temporary archive."""
     try:
         p.progress("downloading project", 100)
+        if remote:
+            p.key_value("Remote", remote)
         with zip_path.open("rb") as zip_file:
             g.require_clean_archive(zip_file)
         destination = choose_target_dir(manifest, target_dir, force)
