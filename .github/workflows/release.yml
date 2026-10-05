@@ -27,6 +27,40 @@ jobs:
         shell: pwsh
         run: ./build.ps1
 
+      # A broken installer must never be published (v0.5.11 - v0.5.16 shipped a
+      # truncated EDR-Setup.exe that failed with "The setup files are corrupted").
+      # So: really install it silently, run the installed edr.exe, then uninstall.
+      - name: Smoke-test EDR-Setup.exe (install, run, uninstall)
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path dist/EDR-Setup.exe).Path
+          $size = (Get-Item $exe).Length
+          Write-Host ("EDR-Setup.exe is {0:N0} bytes" -f $size)
+          Write-Host "::notice title=EDR-Setup.exe size::$size bytes"
+          if ($size -lt 1500000) { throw "EDR-Setup.exe is only $size bytes: the installer payload is missing." }
+
+          $dir = Join-Path $env:RUNNER_TEMP "edr-smoke"
+          $log = Join-Path $env:RUNNER_TEMP "edr-setup.log"
+          $setupArgs = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=`"$dir`"", "/LOG=`"$log`"")
+          $p = Start-Process -FilePath $exe -ArgumentList $setupArgs -Wait -PassThru
+          if ($p.ExitCode -ne 0) {
+            if (Test-Path $log) { Get-Content $log -Tail 40 }
+            throw "Installer exited with code $($p.ExitCode)"
+          }
+
+          $edr = Join-Path $dir "edr.exe"
+          if (-not (Test-Path $edr)) { throw "edr.exe was not installed to $dir" }
+          $out = (& $edr version 2>&1 | Out-String).Trim()
+          Write-Host $out
+          $version = (Select-String -Path print.py -Pattern '^VERSION = "(.+)"').Matches[0].Groups[1].Value
+          if ($out -notmatch [regex]::Escape($version)) { throw "Installed edr.exe reported '$out', expected version $version" }
+          Write-Host "::notice title=Installer smoke test::installed and ran edr $version"
+
+          $uninstaller = Get-ChildItem $dir -Filter "unins*.exe" | Select-Object -First 1
+          if ($uninstaller) {
+            Start-Process -FilePath $uninstaller.FullName -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART") -Wait
+          }
+
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:

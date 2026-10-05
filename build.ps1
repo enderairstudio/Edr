@@ -315,13 +315,14 @@ if (-not (Test-Path $InnoOutput)) {
     throw "Missing installer output: $InnoOutput"
 }
 
+$CompiledSize = (Get-Item $InnoOutput).Length
 Copy-Item $InnoOutput $SetupExe -Force
-$Mt = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter "mt.exe" -ErrorAction SilentlyContinue |
-    Where-Object { $_.FullName -match "\\x64\\mt\.exe$" } | Select-Object -First 1
-if ($Mt) {
-    & $Mt.FullName -nologo -manifest "$Root\installer\setup.manifest" "-outputresource:$SetupExe;1" | Out-Null
-    Copy-Item $SetupExe $InnoOutput -Force
-}
+
+# DO NOT post-process the compiled installer with a resource editor (mt.exe,
+# rcedit, ResourceHacker, ...). An Inno Setup EXE keeps its compressed payload
+# appended AFTER the PE image; rewriting the PE drops it and leaves a ~1 MB stub
+# that fails with "The setup files are corrupted" (this broke v0.5.11 - v0.5.16).
+# Inno already embeds the right manifest for PrivilegesRequired=lowest.
 
 Publish-ReleaseFolder -TargetDir $InstallerDir -PayloadDir $DistEdr -InstallerExePath $SetupExe
 
@@ -359,6 +360,13 @@ Write-Host ""
 Write-Host "If Smart App Control blocks the EXE, use START-HERE.cmd in the folder above." -ForegroundColor Yellow
 Pop-Location
 
+# Guard: nothing after the Inno compile may shrink the installer (signing only adds bytes).
+$FinalSize = (Get-Item $SetupExe).Length
+if ($FinalSize -lt $CompiledSize) {
+    throw ("EDR-Setup.exe shrank from {0:N0} to {1:N0} bytes after compiling; the installer payload was damaged." -f $CompiledSize, $FinalSize)
+}
+Write-Host ("EDR-Setup.exe: {0:N0} bytes" -f $FinalSize) -ForegroundColor Green
+
 # GitHub Actions' `shell: pwsh` wrapper runs `exit $LASTEXITCODE` after this
 # script returns. $LASTEXITCODE is left over from the LAST native command
 # invoked anywhere in the script -- which can easily be an intentionally
@@ -368,4 +376,5 @@ Pop-Location
 # becomes the whole step's reported exit code even though every real build
 # step above succeeded. Everything reaching this line means the build
 # actually succeeded, so say so explicitly.
+
 exit 0
