@@ -137,6 +137,13 @@ def _scan_content(name, data: bytes, suffix: str):
         raise ThreatFound(name, "embedded executable header in text file")
 
 
+def _file_size(path):
+    try:
+        return path.stat().st_size
+    except OSError:
+        return 0
+
+
 def scan_project_files(file_paths, on_progress=None):
     """
     Scan an iterable of (path, archive_name) before sharing.
@@ -172,7 +179,11 @@ def scan_project_report(root_dir=".", include_cli=False, on_progress=None):
     total = len(files) or 1
     for index, (path, archive_name) in enumerate(files, start=1):
         rel = archive_name.as_posix() if hasattr(archive_name, "as_posix") else str(archive_name)
-        entry = {"path": rel, "bytes": path.stat().st_size}
+        try:
+            size = path.stat().st_size
+        except OSError:
+            size = 0
+        entry = {"path": rel, "bytes": size}
         try:
             scan_path(Path(path), archive_name=rel)
             entry["status"] = "clean"
@@ -265,7 +276,7 @@ def require_clean_project(root_dir=".", include_cli=False, skip=False):
         from share import iter_project_files
 
         files = list(iter_project_files(root_dir, include_cli))
-        total_bytes = sum(path.stat().st_size for path, _ in files)
+        total_bytes = sum(_file_size(path) for path, _ in files)
         p.configure_workload(files=len(files), bytes_=total_bytes)
         p.progress("running security scan", 0)
 

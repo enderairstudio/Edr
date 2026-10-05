@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 PLATFORM="${1:-}"
 DIST="$ROOT/dist"
 PAYLOAD="$DIST/edr-unix"
-APP_FILES=(command.py handler.py share.py print.py error.py relay.py guard.py watch.py qrterm.py doctor_checks.py)
+APP_FILES=(command.py handler.py share.py print.py error.py relay.py guard.py watch.py qrterm.py doctor_checks.py updater.py)
 
 if [[ "$PLATFORM" != "macos" && "$PLATFORM" != "linux" ]]; then
   echo "Usage: ./build-unix.sh macos|linux"

@@ -31,7 +31,7 @@ edr share .                         edr pull <sender-ip>
 - [Troubleshooting](#troubleshooting)
 - [FAQ](#faq)
 - [Development](#development)
-- [Build locally](#build-locally) · [CI](#ci) · [Uninstall](#uninstall)
+- [Build locally](#build-locally) · [CI](#ci) · [Update](#update) · [Uninstall](#uninstall)
 
 ## What EDR is / is not
 
@@ -156,6 +156,7 @@ For a relay share the sender prints the code and the exact command for the other
 | `edr scan [folder] [--report file]` | Run EDR Guard without transferring (writes `.json` + `.txt` with `--report`) |
 | `edr ip` | Show this PC's LAN IP |
 | `edr doctor` | Health check: Python, files, ports, disk, relay, PATH |
+| `edr update [--latest] [--check] [--force]` | Install the newest GitHub release ([details](#update)) |
 | `edr uninstall [-v]` | Preview / perform removal |
 | `edr version`, `edr help` | Version / help menu |
 
@@ -367,7 +368,8 @@ Run `edr doctor` first. It checks Python, EDR's files, free disk space, port ava
 | `relay.py` | Relay client and the built-in Python relay server |
 | `relay-rs/` | Rust relay (`edr-relay`) |
 | `guard.py` | EDR Guard |
-| `watch.py`, `qrterm.py`, `doctor_checks.py`, `print.py`, `error.py` | Folder watcher, QR output, health checks, console output, error type |
+| `watch.py`, `qrterm.py`, `doctor_checks.py`, `print.py`, `error.py` | Folder watcher, QR output, health checks, console output and help, error type |
+| `updater.py` | `edr update`: release lookup, checksum, staged install with rollback |
 | `tests/` | Unit and end-to-end tests |
 | `installer/`, `launcher/`, `scripts/`, `winget/`, `bin/` | Packaging |
 
@@ -379,7 +381,7 @@ python -m unittest tests.test_relay_protocol -v # the same protocol suite agains
 cargo test --manifest-path relay-rs/Cargo.toml  # Rust unit tests
 ```
 
-**Adding a Python module** means updating several lists: `CLI_FILES` in `share.py`, `check_handler_files` in `doctor_checks.py`, `files` in `package.json`, the file lists in `build.ps1` / `build-unix.sh` / `scripts/install-*.sh`, and the installer scripts. `AGENTS.md` has the full checklist and the project conventions.
+**Adding a Python module** means updating several lists: `CLI_FILES` in `share.py`, `check_handler_files` in `doctor_checks.py`, `files` in `package.json`, the file lists in `build.ps1` / `build-unix.sh`, `hiddenimports` in `edr.spec` and the `py_compile` line in `tests.yml`. `AGENTS.md` has the full checklist and the project conventions.
 
 ## Build locally
 
@@ -410,6 +412,22 @@ chmod +x build-unix.sh
 
 - Pushing a tag `vX.Y.Z` (for example `v0.5.17`) runs [`release.yml`](.github/workflows/release.yml) and publishes the platform installers.
 - [`relay-rs.yml`](.github/workflows/relay-rs.yml) builds and tests the Rust relay on Linux, Windows and macOS, runs the protocol conformance suite and uploads the binaries as artifacts. It runs when `relay-rs/`, `relay.py` or the protocol tests change and does not touch the release workflow.
+
+## Update
+
+```bash
+edr update --latest    # install the newest release if it is newer than this one
+edr update --check     # only look, install nothing
+edr update --force     # reinstall even when already up to date
+```
+
+`edr update` asks the GitHub API for the latest release tag, compares it with the running version and, if the release is newer, downloads it, runs the downloaded copy once as a self-test, swaps the files in (every replaced file is backed up first) and runs the installed copy once more. If anything fails, the previous install is restored. `edr.exe` can be replaced while it is running because the old one is renamed, not overwritten.
+
+- **Windows** installs `EDR-win64.zip` from the release and checks it against the SHA-256 GitHub publishes for the asset.
+- **macOS / Linux** install the release's source snapshot (the `.dmg` and `.deb` cannot be unpacked in place) and copy the files listed in `build-unix.sh`. The `edr` launcher script is not touched.
+- A `.deb` install lives in `/usr/share/edr`, so use `sudo edr update --latest`. A source checkout is updated with `git pull`, and an npm install with `npm install -g @enderair/edr@latest`.
+- Set `GITHUB_TOKEN` if you hit the unauthenticated API rate limit (the token is only sent to `api.github.com`).
+- Versions before the one that introduced `edr update` do not have the command; install the newest release once by hand.
 
 ## Uninstall
 

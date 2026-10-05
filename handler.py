@@ -169,6 +169,12 @@ def build_parser():
     doctor_cmd = subparsers.add_parser("doctor", help="show CLI debug paths", allow_abbrev=False)
     doctor_cmd.set_defaults(func=cmd_doctor)
 
+    update_cmd = subparsers.add_parser("update", help="update EDR to the latest release", allow_abbrev=False)
+    update_cmd.add_argument("--latest", action="store_true", help="install the newest GitHub release (the default)")
+    update_cmd.add_argument("--check", action="store_true", help="only check for a newer release, install nothing")
+    update_cmd.add_argument("--force", action="store_true", help="reinstall even when already up to date")
+    update_cmd.set_defaults(func=cmd_update)
+
     uninstall_cmd = subparsers.add_parser("uninstall", help="remove EDR from this user account", allow_abbrev=False)
     uninstall_cmd.add_argument("-v", "--full", action="store_true", help="fully remove EDR files, state, and PATH entries")
     uninstall_cmd.set_defaults(func=cmd_uninstall)
@@ -581,6 +587,14 @@ def cmd_doctor(args):
     else:
         p.success("All checks passed")
     return 0
+
+
+def cmd_update(args):
+    try:
+        import updater
+    except ImportError as err:
+        raise e.CliError(f"updater.py is missing from this install ({err}). Reinstall EDR.") from err
+    return updater.run_update(check_only=args.check, force=args.force)
 
 
 def cmd_uninstall(args):

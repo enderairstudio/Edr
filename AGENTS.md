@@ -37,6 +37,15 @@ Transfer path:
 - **Config safety:** `save_store` is atomic; legacy `.edr/sharers.json` is only migrated when the cwd is
   the EDR app dir (a received project could otherwise plant a sharer profile).
 - `.deb` is `Architecture: all`.
+- **`edr update [--latest|--check|--force]`** (`updater.py`): latest release tag from the GitHub API, numeric
+  compare with `print.VERSION`, download, stage, self-test the staged copy (`command.py version`), swap files in
+  with `<name>.edr-old` backups (a running `edr.exe` can be renamed on Windows), self-test the installed copy,
+  roll back on failure. Windows installs the `EDR-win64.zip` asset (SHA-256 checked against GitHub's `digest`);
+  macOS/Linux install the source `zipball_url` and copy the names in `build-unix.sh` `APP_FILES` (a `.deb` /
+  `.dmg` cannot be unpacked in place; `zstd` debs are unreadable to Python < 3.14). `EDR_UPDATE_API` points it at
+  a fake server (tests/test_updater.py does this and also allows plain http then). A release whose `VERSION`
+  is not newer than the running one is refused, so a forgotten bump cannot cause an update loop.
+- `edr help` is a short two-column reference (`print.help_menu`, ASCII only, <= 78 columns, enforced by a test).
 
 ## Important Files
 
@@ -51,8 +60,11 @@ Transfer path:
 ## Adding a Python module (checklist)
 
 Update: `CLI_FILES` (+ `CLI_SIGNATURE` if it is core) in `share.py`, `check_handler_files` in
-`doctor_checks.py`, `files` in `package.json`, the file lists in `build.ps1` / `build-unix.sh` /
-`scripts/install-*.sh`, and the installer scripts. Prefer extending existing modules.
+`doctor_checks.py`, `files` in `package.json`, the file lists in `build.ps1` / `build-unix.sh`,
+`hiddenimports` in `edr.spec`, and the `py_compile` line in `.github/workflows/tests.yml` (the install scripts
+and the Inno script copy whole folders, so they need no edit). Forgetting `updater.py`-style lists means the
+release ships without the module: `edr update` is imported lazily so only that command breaks, and `edr doctor`
+reports the missing file. Prefer extending existing modules.
 
 ## Still Open
 
@@ -76,7 +88,7 @@ Update: `CLI_FILES` (+ `CLI_SIGNATURE` if it is core) in `share.py`, `check_hand
    high-latency links.
 7. **Misc.** `edr edit --idnew` can clobber another profile with the same id (collision is astronomically
    unlikely); a `request_pull` that lands between consume and the sender's next `register_wait` is wiped
-   in `--auto` relay mode; `scripts/install-linux.sh` does `rm -rf $EDR_INSTALL_DIR` (custom dir only).
+   in `--auto` relay mode; (fixed: the install scripts now only remove `<dir>/app` and `<dir>/edr`, never the whole `EDR_INSTALL_DIR`).
 
 ## Known Commands
 

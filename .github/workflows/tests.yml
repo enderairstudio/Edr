@@ -23,6 +23,6 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Compile all modules
-        run: python -m py_compile share.py relay.py handler.py guard.py print.py doctor_checks.py watch.py qrterm.py command.py error.py
+        run: python -m py_compile share.py relay.py handler.py guard.py print.py doctor_checks.py watch.py qrterm.py updater.py command.py error.py
       - name: Unit and end-to-end tests (one process per module, with timeouts)
         run: python tests/ci_runner.py

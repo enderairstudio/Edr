@@ -25,7 +25,7 @@ $InstallerDir = Join-Path $Root "dist\EDR-Setup"
 $SetupExe = Join-Path $Root "dist\EDR-Setup.exe"
 $AppFiles = @(
     "command.py", "handler.py", "share.py", "print.py", "error.py", "relay.py", "guard.py",
-    "watch.py", "qrterm.py", "doctor_checks.py"
+    "watch.py", "qrterm.py", "doctor_checks.py", "updater.py"
 )
 
 function Get-Iscc {

@@ -35,7 +35,7 @@ def check_python_version():
 
 def check_handler_files(handler_path):
     app_dir = handler_path.parent
-    missing = [name for name in ("command.py", "handler.py", "share.py", "guard.py", "relay.py", "watch.py", "qrterm.py", "error.py", "print.py", "doctor_checks.py") if not (app_dir / name).exists()]
+    missing = [name for name in ("command.py", "handler.py", "share.py", "guard.py", "relay.py", "watch.py", "qrterm.py", "error.py", "print.py", "doctor_checks.py", "updater.py") if not (app_dir / name).exists()]
     if missing:
         return _fail(f"Missing app files: {', '.join(missing)}")
     return _ok(f"App bundle at {app_dir}")

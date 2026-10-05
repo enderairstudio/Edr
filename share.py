@@ -29,7 +29,7 @@ ROOT_ONLY_IGNORE_DIRS = {'python', 'launcher'}
 IGNORE_FILES = {'project_payload.zip'}
 CLI_FILES = {
     'command.py', 'handler.py', 'share.py', 'error.py', 'print.py', 'relay.py', 'guard.py',
-    'watch.py', 'qrterm.py', 'doctor_checks.py',
+    'watch.py', 'qrterm.py', 'doctor_checks.py', 'updater.py',
 }
 # CLI_FILES are only filtered when the folder really is the EDR CLI itself.
 # Plain names like handler.py / error.py are extremely common in normal projects.
@@ -114,7 +114,7 @@ def iter_project_files(root_dir=".", include_cli=False):
 
 def project_summary(root_dir=".", include_cli=False):
     files = list(iter_project_files(root_dir, include_cli))
-    total_bytes = sum(path.stat().st_size for path, _ in files)
+    total_bytes = sum(_safe_size(path) for path, _ in files)
     return {
         "files": len(files),
         "bytes": total_bytes,
@@ -129,7 +129,7 @@ def build_manifest(root_dir=".", include_cli=False, share_id=None, non_network=F
     for path, archive_path in iter_project_files(root, include_cli):
         files.append({
             "path": archive_path.as_posix(),
-            "bytes": path.stat().st_size,
+            "bytes": _safe_size(path),
         })
     manifest = {
         "share_id": share_id or root.name,
@@ -357,8 +357,7 @@ def _serve_via_relay(root, include_cli, share_id, relay_id, forever, relay_url, 
             else:
                 r.wait_for_pull_request(relay_id, base_url=base)
         except TimeoutError as err:
-            p.error(str(err))
-            return
+            raise e.CliError(str(err)) from err
 
         p.progress("waiting for receiver", 100)
         p.success("Receiver connected — preparing share")
@@ -393,8 +392,7 @@ def _serve_via_relay(root, include_cli, share_id, relay_id, forever, relay_url, 
             raise
         except TimeoutError as err:
             r.delete_room(relay_id, base_url=base)
-            p.error(str(err))
-            return
+            raise e.CliError(str(err)) from err
         except Exception:
             r.delete_room(relay_id, base_url=base)
             raise

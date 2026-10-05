@@ -241,126 +241,90 @@ def prompt_name_countdown(seconds=3):
     return result[0]
 
 
-_HELP_WIDTH = 84
-_HELP_CMD_COL = 52
+_HELP_COL = 32
 
 
-def _help_rule(char="="):
-    print(char * _HELP_WIDTH)
-
-
-def _help_blank():
+def _help_title(text):
     print()
+    print(text)
 
 
-def _help_heading(text):
-    print(f"  {text}")
-
-
-def _help_section(title):
-    _help_blank()
-    print(f"  >> {title}")
-    print(f"  {'-' * (len(title) + 2)}")
-
-
-def _help_cmd(command, description):
-    if len(command) >= _HELP_CMD_COL:
-        print(f"    {command}")
-        print(f"    {'':<{_HELP_CMD_COL}}{description}")
-        return
-    print(f"    {command:<{_HELP_CMD_COL}}{description}")
-
-
-def _help_note(text):
-    print(f"      {text}")
-
-
-def _help_flow(steps):
-    for index, step in enumerate(steps, start=1):
-        print(f"    {index}. {step}")
+def _help_row(left, right=""):
+    left = f"  {left}"
+    if not right:
+        print(left)
+    elif len(left) + 2 > _HELP_COL:
+        print(left)
+        print(" " * _HELP_COL + right)
+    else:
+        print(f"{left:<{_HELP_COL}}{right}")
 
 
 def help_menu():
-    """Print the EDR command reference (ASCII-safe for Windows consoles)."""
+    """Print the EDR command reference (ASCII only, safe for Windows consoles)."""
     progress_finish()
-    store = "%USERPROFILE%\\.edr\\sharers.json"
+    store = os.path.join(os.path.expanduser("~"), ".edr", "sharers.json")
 
-    _help_rule()
-    title = "  EDR Project Sharer"
-    version_label = f"v{VERSION}"
-    print(title + version_label.rjust(_HELP_WIDTH - len(title)))
-    print("  Share folders over LAN or relay  |  EDR Guard scans every transfer")
-    print(f"  Saved profiles: {store}")
-    _help_rule()
+    print(f"EDR Project Sharer {VERSION}")
+    print("Share project folders over LAN or relay. EDR Guard scans every transfer.")
 
-    _help_section("Quick start")
-    _help_flow([
-        "LAN:   edr create sharer <folder> [--id myapp]  then  edr start myapp",
-        "Relay: edr create sharer <folder> --non-network --idnew  then  edr start <id>",
-        "Pull:  edr pull <ip>  or  edr pull Edrnko_<id>  (QR shown when sharing)",
-    ])
+    _help_title("USAGE")
+    _help_row("edr <command> [options]")
 
-    _help_section("Profiles")
-    _help_cmd("edr create [sharer] [folder]", "Save a reusable sharer profile")
-    _help_cmd("edr list", "List saved sharers (name + id)")
-    _help_cmd("edr edit sharer [id|name]", "Change path, name, LAN/relay, flags")
-    _help_cmd("edr rm share --id <id|name>", "Delete a profile")
-    _help_cmd("edr dir [id|name]", "Show profile folder path")
-    _help_cmd("edr set-dir <id|name> <folder>", "Change folder only")
-    _help_cmd("edr status [id|name]", "Files + payload size for a profile")
+    _help_title("QUICK START")
+    _help_row("edr create . --id myapp", "Save this folder as a sharer")
+    _help_row("edr start myapp", "Share it (prints a pull command + QR)")
+    _help_row("edr pull <ip>", "Receive it on another device")
 
-    _help_section("Share and receive")
-    _help_cmd("edr start [id|name]", "Serve until pull completes (+ QR code)")
-    _help_cmd("edr push [id|name]", "Serve once from a saved profile")
-    _help_cmd("edr share [folder]", "One-off share (no profile)")
-    _help_cmd("edr pull <ip|Edrnko_id>", "Download a shared project")
-    _help_cmd("edr relay start [--engine rust]", "Relay server (cross-network; optional)")
+    _help_title("SHARE AND RECEIVE")
+    _help_row("start [id|name]", "Share a saved sharer until it is pulled")
+    _help_row("push [id|name]", "Share a saved sharer once")
+    _help_row("share [folder]", "One-off share, nothing saved")
+    _help_row("pull <ip|Edrnko_id>", "Download a shared project")
+    _help_row("relay start", "Run a relay (sharing across networks)")
 
-    _help_section("Tools")
-    _help_cmd("edr pack [zip]", "Zip a folder locally")
-    _help_cmd("edr scan [folder]", "Run EDR Guard (no transfer)")
-    _help_cmd("edr scan [folder] --report <file>", "Export Guard report (.json + .txt)")
-    _help_cmd("edr ip", "Show this PC's LAN IP")
-    _help_cmd("edr doctor", "Health check: Python, ports, relay, PATH")
-    _help_cmd("edr uninstall", "Preview files, PATH entries, and npm package removal")
-    _help_cmd("edr uninstall -v", "Fully remove EDR for this user, then say goodbye")
-    _help_cmd("edr version  |  edr v", "Show version")
-    _help_cmd("edr help", "Show this menu")
+    _help_title("SHARERS")
+    _help_row("create [folder]", "Save a reusable sharer")
+    _help_row("list", "List saved sharers")
+    _help_row("edit [id|name]", "Change folder, name, mode or flags")
+    _help_row("rm share --id <id|name>", "Delete a sharer")
+    _help_row("dir [id|name]", "Print a sharer's folder")
+    _help_row("set-dir <id|name> <folder>", "Point a sharer at another folder")
+    _help_row("status [id|name]", "Show the files and size it would send")
 
-    _help_section("Common flags")
-    _help_cmd("--watch", "While waiting, detect folder changes (auto-share)")
-    _help_cmd("--auto", "Keep serving after each pull")
-    _help_cmd("--non-network", "Relay mode (Edrnko_ code)")
-    _help_cmd("--idnew", "New random relay id")
-    _help_cmd("--relay-url <url>", "Relay URL shared by sender and receiver")
-    _help_cmd("--fast", "Skip ZIP compression for maximum throughput")
-    _help_cmd("--name <name>", "Display name (asked in a terminal if omitted)")
-    _help_cmd("--port <port>", "LAN TCP port (default 5005)")
-    _help_cmd("--allow-self", "Allow pull on this same PC")
-    _help_cmd("--skip-guard", "Skip security scan when sending")
-    _help_cmd("--no-qr", "Hide terminal QR on share")
-    _help_cmd("--to <dir>  --force", "Pull destination / overwrite")
+    _help_title("TOOLS")
+    _help_row("scan [folder] [--report f]", "Run EDR Guard without sharing")
+    _help_row("pack [zip]", "Zip a folder locally")
+    _help_row("ip", "Show this device's LAN IP")
+    _help_row("doctor", "Check Python, ports, relay and PATH")
+    _help_row("update --latest", "Install the newest EDR release")
+    _help_row("update --check", "Only check for a newer release")
+    _help_row("uninstall [-v]", "Preview removal (-v removes EDR)")
+    _help_row("version", "Show the version")
 
-    _help_section("Relay vs LAN")
-    _help_note("Relay (any network): use the same relay URL on every PC")
-    _help_cmd("edr relay start --host 0.0.0.0 --port 8765", "Start a reachable relay")
-    _help_cmd("edr create sharer <folder> --non-network --idnew --relay-url http://<relay-ip>:8765", "Create relay profile")
-    _help_cmd("edr pull Edrnko_<id> --relay-url http://<relay-ip>:8765", "Receive on another machine")
-    _help_blank()
-    _help_note("LAN (same Wi-Fi): use IP from edr ip")
-    _help_cmd("edr pull <ip> --port 5005", "Receive on another device")
+    _help_title("OPTIONS")
+    _help_row("--non-network", "Share through a relay instead of LAN")
+    _help_row("--relay-url <url>", "Relay address (same on both sides)")
+    _help_row("--idnew", "Generate a new random relay id")
+    _help_row("--port <n>", "LAN port (default 5005)")
+    _help_row("--name <name>", "Display name for a sharer")
+    _help_row("--watch", "Re-announce when the folder changes")
+    _help_row("--auto", "Keep serving after each pull")
+    _help_row("--fast", "Skip compression (fastest on a LAN)")
+    _help_row("--skip-guard", "Skip the security scan when sending")
+    _help_row("--no-qr", "Do not print the QR code")
+    _help_row("--allow-self", "Allow pulling on the same machine")
+    _help_row("--to <dir>", "Pull into this folder")
+    _help_row("--force", "Overwrite existing files when pulling")
 
-    _help_section("Examples")
-    _help_cmd("edr create sharer . --id devbox --watch", "Profile with auto-share")
-    _help_cmd("edr create sharer . --id devbox --fast", "Profile optimized for LAN speed")
-    _help_cmd("edr start devbox", "Share and show pull QR")
-    _help_cmd("edr scan . --report guard-report", "Write guard-report.json/.txt")
-    _help_cmd("edr pull 192.168.1.20 --to .\\copy --force", "LAN pull into folder")
-    _help_cmd("edr uninstall -v", "Remove EDR state, installs, PATH entries, and npm package")
+    _help_title("ACROSS NETWORKS")
+    _help_row("edr relay start --host 0.0.0.0 --port 8765")
+    _help_row("edr create . --non-network --idnew --relay-url http://<relay-ip>:8765")
+    _help_row("edr pull Edrnko_<id> --relay-url http://<relay-ip>:8765")
 
-    _help_rule("-")
-    print("  Aliases: v=version  ls=list  run=start  serve=share  send=push")
-    print("           init=create  st=status  recv=receive  dir=directory")
-    print("  Names: start/edit/rm/dir/status accept id, relay id, or display name")
-    _help_rule()
-    _help_blank()
+    print()
+    print("Aliases: ls=list run=start serve=share send=push init=create st=status")
+    print("         recv=receive dir=directory v=version")
+    print(f"Sharers are saved in {store}")
+    print("Run edr <command> -h for the options of one command.")
+    print()

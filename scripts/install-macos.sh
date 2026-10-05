@@ -10,7 +10,7 @@ echo "  EDR Project Sharer - macOS Setup"
 echo "  Installing to: $INSTALL_DIR"
 echo ""
 
-rm -rf "$INSTALL_DIR"
+rm -rf "$INSTALL_DIR/app" "$INSTALL_DIR/edr"
 mkdir -p "$INSTALL_DIR"
 cp -R "$ROOT/edr/"* "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/edr"

@@ -19,6 +19,7 @@
                   "watch.py",
                   "qrterm.py",
                   "doctor_checks.py",
+                  "updater.py",
                   "README.md",
                   "LICENSE"
               ],
