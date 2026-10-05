@@ -17,12 +17,12 @@ VSVersionInfo(
                 [
                     StringStruct("CompanyName", "Ender Air Studio"),
                     StringStruct("FileDescription", "EDR Project Sharer"),
-                    StringStruct("FileVersion", "0.5.16.0"),
+                    StringStruct("FileVersion", "0.5.17.0"),
                     StringStruct("InternalName", "EDR"),
                     StringStruct("LegalCopyright", "Copyright (c) Ender Air Studio"),
                     StringStruct("OriginalFilename", "EDR-Setup.exe"),
                     StringStruct("ProductName", "EDR Project Sharer"),
-                    StringStruct("ProductVersion", "0.5.16.0"),
+                    StringStruct("ProductVersion", "0.5.17.0"),
                 ],
             )
         ]),
